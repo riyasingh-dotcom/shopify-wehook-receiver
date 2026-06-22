@@ -11,3 +11,15 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  topic       String
+  shopDomain  String
+  shopifyId   String   @unique
+  payload     Json
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  status      String   @default("received")
+}
