@@ -5,7 +5,7 @@ describe('detectProductChanges', () => {
 
   it('returns empty array when title has not changed', () => {
     const result = detectProductChanges(base, { ...base });
-    expect(result.length).toBe(99);
+    expect(result).toEqual([]);
   });
 
   it('returns a change entry when title changes', () => {
