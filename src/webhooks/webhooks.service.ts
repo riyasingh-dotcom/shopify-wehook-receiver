@@ -1,12 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+
+// Type predicate: narrows unknown to a JSON object whose values are InputJsonValue-compatible
+function isJsonObject(
+  val: unknown,
+): val is { [key: string]: Prisma.InputJsonValue | null | undefined } {
+  return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
 
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   verifyShopifyHmac(rawBody: Buffer, signature: string): boolean {
     const secret = this.config.getOrThrow<string>('SHOPIFY_WEBHOOK_SECRET');
@@ -20,12 +32,45 @@ export class WebhooksService {
     return crypto.timingSafeEqual(expected, received);
   }
 
-  handleShopifyWebhook(topic: string, rawBody: Buffer): void {
-    const payload = JSON.parse(rawBody.toString('utf8')) as Record<
-      string,
-      unknown
-    >;
-    const preview = JSON.stringify(payload).slice(0, 100);
-    this.logger.log(`topic=${topic} payload=${preview}`);
+  async handleShopifyWebhook(
+    topic: string,
+    shopDomain: string,
+    rawBody: Buffer,
+  ): Promise<void> {
+    const raw: unknown = JSON.parse(rawBody.toString('utf8'));
+    const obj = isJsonObject(raw) ? raw : {};
+    const id = obj['id'];
+    const shopifyId =
+      typeof id === 'string' || typeof id === 'number' ? String(id) : '';
+
+    this.logger.log(
+      `topic=${topic} payload=${JSON.stringify(raw).slice(0, 100)}`,
+    );
+
+    try {
+      await this.prisma.webhookEvent.create({
+        data: {
+          topic,
+          shopDomain,
+          shopifyId,
+          payload: raw as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err: unknown) {
+      if (isPrismaUniqueConstraintError(err)) {
+        this.logger.warn(`duplicate shopifyId=${shopifyId} — skipped`);
+        return;
+      }
+      throw err;
+    }
   }
+}
+
+function isPrismaUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    err.code === 'P2002'
+  );
 }

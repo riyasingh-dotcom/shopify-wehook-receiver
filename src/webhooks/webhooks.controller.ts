@@ -7,9 +7,10 @@ export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 
   @Post('shopify')
-  handleShopify(@Req() req: Request): void {
+  async handleShopify(@Req() req: Request): Promise<void> {
     const signature = req.headers['x-shopify-hmac-sha256'];
     const topic = req.headers['x-shopify-topic'];
+    const shopDomain = req.headers['x-shopify-shop-domain'];
     const rawBody = req.body as Buffer;
 
     if (
@@ -20,8 +21,9 @@ export class WebhooksController {
       throw new UnauthorizedException();
     }
 
-    this.webhooksService.handleShopifyWebhook(
+    await this.webhooksService.handleShopifyWebhook(
       typeof topic === 'string' ? topic : 'unknown',
+      typeof shopDomain === 'string' ? shopDomain : 'unknown',
       rawBody,
     );
   }
