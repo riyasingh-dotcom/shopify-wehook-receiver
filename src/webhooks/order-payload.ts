@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 const logger = new Logger('parseOrderPayload');
 
+const bigIntId = z.union([z.string(), z.number()]).transform(String);
+
 export const OrderPayloadSchema = z.object({
-  id: z.number(),
+  id: bigIntId,
   order_number: z.number(),
   total_price: z.string(),
   currency: z.string(),
@@ -12,7 +14,7 @@ export const OrderPayloadSchema = z.object({
   created_at: z.string(),
   customer: z
     .object({
-      id: z.number(),
+      id: bigIntId,
       email: z.string(),
       first_name: z.string(),
       last_name: z.string(),
@@ -20,11 +22,14 @@ export const OrderPayloadSchema = z.object({
     .nullable(),
   line_items: z.array(
     z.object({
-      id: z.number(),
+      id: bigIntId,
       title: z.string(),
       quantity: z.number().int().positive(),
       price: z.string(),
-      variant_id: z.number().nullable(),
+      variant_id: z
+        .union([z.string(), z.number()])
+        .transform(String)
+        .nullable(),
     }),
   ),
 });

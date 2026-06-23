@@ -41,7 +41,10 @@ export class WebhooksService {
     return crypto.timingSafeEqual(expected, received);
   }
 
-  async handleOrderCreated(raw: unknown, shopDomain: string): Promise<void> {
+  async handleOrderCreated(
+    raw: unknown,
+    shopDomain: string,
+  ): Promise<string | null> {
     const order = parseOrderPayload(raw);
 
     this.logger.log(
@@ -49,21 +52,31 @@ export class WebhooksService {
     );
 
     try {
-      await this.prisma.webhookEvent.create({
+      const event = await this.prisma.webhookEvent.create({
         data: {
           topic: 'orders/create',
           shopDomain,
-          shopifyId: String(order.id),
+          shopifyId: order.id,
           payload: order,
         },
       });
+      return event.id;
     } catch (err: unknown) {
       if (isPrismaUniqueConstraintError(err)) {
-        this.logger.warn(`duplicate orders/create id=${order.id} — skipped`);
-        return;
+        this.logger.warn(
+          `duplicate orders/create shopifyId=${order.id} — skipped`,
+        );
+        return null;
       }
       throw err;
     }
+  }
+
+  async markProcessed(id: string): Promise<void> {
+    await this.prisma.webhookEvent.update({
+      where: { id },
+      data: { status: 'processed', processedAt: new Date() },
+    });
   }
 
   async handleProductUpdated(raw: unknown, shopDomain: string): Promise<void> {
