@@ -40,3 +40,7 @@ jobs:
       # 3. Build — only runs if both lint and typecheck pass.
       - name: Build
         run: pnpm run build
+
+      # 4. Unit tests — runs after a successful build.
+      - name: Test
+        run: pnpm test
