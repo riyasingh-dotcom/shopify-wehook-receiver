@@ -60,5 +60,3 @@ export function parseOrderPayload(raw: unknown): OrderPayload {
   return order;
 }
 
-var x = "this uses var which ESLint forbids"
-console.log(x)
