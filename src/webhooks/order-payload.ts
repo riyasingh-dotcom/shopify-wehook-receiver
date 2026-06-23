@@ -24,7 +24,7 @@ export const OrderPayloadSchema = z.object({
       title: z.string(),
       quantity: z.number().int().positive(),
       price: z.string(),
-      variant_id: z.number(),
+      variant_id: z.number().nullable(),
     }),
   ),
 });
@@ -59,4 +59,3 @@ export function parseOrderPayload(raw: unknown): OrderPayload {
 
   return order;
 }
-
