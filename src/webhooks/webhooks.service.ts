@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseOrderPayload } from './order-payload';
 
 // Type predicate: narrows unknown to a JSON object whose values are InputJsonValue-compatible
 function isJsonObject(
@@ -47,13 +48,18 @@ export class WebhooksService {
       `topic=${topic} payload=${JSON.stringify(raw).slice(0, 100)}`,
     );
 
+    const payload: Prisma.InputJsonValue =
+      topic === 'orders/create'
+        ? parseOrderPayload(raw)
+        : (raw as Prisma.InputJsonValue);
+
     try {
       await this.prisma.webhookEvent.create({
         data: {
           topic,
           shopDomain,
           shopifyId,
-          payload: raw as Prisma.InputJsonValue,
+          payload,
         },
       });
     } catch (err: unknown) {

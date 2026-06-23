@@ -24,6 +24,11 @@ Run a single test file:
 pnpm jest src/webhooks/webhooks.service.spec.ts
 ```
 
+Seed the database with a test webhook event:
+```bash
+node scripts/seed.js
+```
+
 ## Architecture
 
 The app is a NestJS HTTP service that receives and processes Shopify webhooks.
@@ -50,10 +55,19 @@ prisma.config.ts            # Prisma config (reads DATABASE_URL from env)
 
 **Prisma client** is generated to `generated/prisma/` (not `node_modules`). After schema changes, run `pnpm prisma generate` and `pnpm prisma migrate dev`.
 
+**PrismaModule** (`src/prisma/`) wraps `PrismaClient` and is imported into `AppModule` — import it into any feature module that needs database access.
+
+**WebhookEvent model** has `status` (default `"received"`) and `processedAt` fields for a processing-pipeline pattern. Handlers that finish processing a record should set `status` and `processedAt`; currently only persistence ("received") is implemented.
+
+**Idempotency:** `shopifyId` has a unique constraint. `WebhooksService.handleShopifyWebhook` catches Prisma error P2002 and silently skips duplicates — Shopify delivers webhooks at-least-once, so all handlers must tolerate this.
+
+**Body parser:** `main.ts` disables NestJS's default body parser and mounts `express.raw({ type: 'application/json' })` exclusively on `/webhooks/shopify` so HMAC verification has access to the raw bytes. Any new webhook route must be added to the same pattern in `main.ts` before `express.json()` is applied.
+
 ## Environment
 
 Required env vars (see `.env.example`):
-- `DATABASE_URL` — PostgreSQL connection string
+- `DATABASE_URL` — PostgreSQL connection string (pooled URL for Prisma runtime)
+- `DIRECT_URL` — non-pooled PostgreSQL URL (required by Prisma for migrations)
 - `SHOPIFY_WEBHOOK_SECRET` — used to verify HMAC signatures on incoming webhooks
 
 ## Shopify Webhook Verification
