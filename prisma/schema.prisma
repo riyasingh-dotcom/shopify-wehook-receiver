@@ -25,3 +25,20 @@ model WebhookEvent {
   processedAt DateTime?
   status      String   @default("received")
 }
+
+model Product {
+  id         String   @id        // Shopify product ID
+  shopDomain String
+  payload    Json                // latest full product snapshot (used for diffing)
+  updatedAt  DateTime @updatedAt
+}
+
+model ProductChangeLog {
+  id          String   @id @default(cuid())
+  shopifyId   String
+  productTitle String
+  field       String   // "title" | "status" | "price" | etc.
+  oldValue    String?
+  newValue    String
+  changedAt   DateTime @default(now())
+}

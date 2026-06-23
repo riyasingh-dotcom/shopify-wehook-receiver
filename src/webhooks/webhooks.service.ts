@@ -4,12 +4,21 @@ import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseOrderPayload } from './order-payload';
+import { detectProductChanges } from './product-diff';
 
-// Type predicate: narrows unknown to a JSON object whose values are InputJsonValue-compatible
 function isJsonObject(
   val: unknown,
 ): val is { [key: string]: Prisma.InputJsonValue | null | undefined } {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
+
+function isPrismaUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    err.code === 'P2002'
+  );
 }
 
 @Injectable()
@@ -26,57 +35,89 @@ export class WebhooksService {
     const expected = crypto
       .createHmac('sha256', secret)
       .update(rawBody)
-      .digest(); // raw Buffer, not hex/base64
+      .digest();
     const received = Buffer.from(signature, 'base64');
-    // Lengths must match before timingSafeEqual — mismatched lengths throw
     if (expected.length !== received.length) return false;
     return crypto.timingSafeEqual(expected, received);
   }
 
-  async handleShopifyWebhook(
-    topic: string,
-    shopDomain: string,
-    rawBody: Buffer,
-  ): Promise<void> {
-    const raw: unknown = JSON.parse(rawBody.toString('utf8'));
-    const obj = isJsonObject(raw) ? raw : {};
-    const id = obj['id'];
-    const shopifyId =
-      typeof id === 'string' || typeof id === 'number' ? String(id) : '';
+  async handleOrderCreated(raw: unknown, shopDomain: string): Promise<void> {
+    const order = parseOrderPayload(raw);
 
     this.logger.log(
-      `topic=${topic} payload=${JSON.stringify(raw).slice(0, 100)}`,
+      `orders/create order=#${order.order_number} total=${order.total_price} ${order.currency} shop=${shopDomain}`,
     );
-
-    const payload: Prisma.InputJsonValue =
-      topic === 'orders/create'
-        ? parseOrderPayload(raw)
-        : (raw as Prisma.InputJsonValue);
 
     try {
       await this.prisma.webhookEvent.create({
         data: {
-          topic,
+          topic: 'orders/create',
           shopDomain,
-          shopifyId,
-          payload,
+          shopifyId: String(order.id),
+          payload: order,
         },
       });
     } catch (err: unknown) {
       if (isPrismaUniqueConstraintError(err)) {
-        this.logger.warn(`duplicate shopifyId=${shopifyId} — skipped`);
+        this.logger.warn(`duplicate orders/create id=${order.id} — skipped`);
         return;
       }
       throw err;
     }
   }
-}
 
-function isPrismaUniqueConstraintError(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    err.code === 'P2002'
-  );
+  async handleProductUpdated(raw: unknown, shopDomain: string): Promise<void> {
+    const obj = isJsonObject(raw) ? raw : {};
+    const id = obj['id'];
+    const shopifyId =
+      typeof id === 'string' || typeof id === 'number' ? String(id) : '';
+    const title = typeof obj['title'] === 'string' ? obj['title'] : 'unknown';
+
+    this.logger.log(
+      `products/update id=${shopifyId} title="${title}" shop=${shopDomain}`,
+    );
+
+    // Step 1: read previous snapshot BEFORE overwriting
+    const existing = await this.prisma.product.findUnique({
+      where: { id: shopifyId },
+    });
+
+    // Step 2: diff previous snapshot vs incoming payload
+    const changes = detectProductChanges(existing?.payload ?? null, raw);
+
+    if (changes.length > 0) {
+      this.logger.log(
+        `products/update id=${shopifyId} detected ${changes.length} change(s): ${JSON.stringify(changes)}`,
+      );
+    }
+
+    // Step 3 + 4: overwrite snapshot and write audit log atomically
+    const changeLogOps = changes.map((change) =>
+      this.prisma.productChangeLog.create({
+        data: {
+          shopifyId,
+          productTitle: title,
+          field: change.field,
+          oldValue: change.oldValue,
+          newValue: change.newValue,
+        },
+      }),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.product.upsert({
+        where: { id: shopifyId },
+        create: {
+          id: shopifyId,
+          shopDomain,
+          payload: raw as Prisma.InputJsonValue,
+        },
+        update: {
+          payload: raw as Prisma.InputJsonValue,
+          shopDomain,
+        },
+      }),
+      ...changeLogOps,
+    ]);
+  }
 }

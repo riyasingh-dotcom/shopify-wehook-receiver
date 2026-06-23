@@ -1,9 +1,17 @@
-import { Controller, Post, Req, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Logger,
+  Post,
+  Req,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { WebhooksService } from './webhooks.service';
 
 @Controller('webhooks')
 export class WebhooksController {
+  private readonly logger = new Logger(WebhooksController.name);
+
   constructor(private readonly webhooksService: WebhooksService) {}
 
   @Post('shopify')
@@ -21,10 +29,20 @@ export class WebhooksController {
       throw new UnauthorizedException();
     }
 
-    await this.webhooksService.handleShopifyWebhook(
-      typeof topic === 'string' ? topic : 'unknown',
-      typeof shopDomain === 'string' ? shopDomain : 'unknown',
-      rawBody,
-    );
+    const normalizedTopic = typeof topic === 'string' ? topic : 'unknown';
+    const normalizedDomain =
+      typeof shopDomain === 'string' ? shopDomain : 'unknown';
+    const raw: unknown = JSON.parse(rawBody.toString('utf8'));
+
+    switch (normalizedTopic) {
+      case 'orders/create':
+        await this.webhooksService.handleOrderCreated(raw, normalizedDomain);
+        break;
+      case 'products/update':
+        await this.webhooksService.handleProductUpdated(raw, normalizedDomain);
+        break;
+      default:
+        this.logger.warn(`Unhandled webhook topic: ${normalizedTopic}`);
+    }
   }
 }
