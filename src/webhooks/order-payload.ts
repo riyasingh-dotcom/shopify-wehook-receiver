@@ -15,11 +15,12 @@ export const OrderPayloadSchema = z.object({
   customer: z
     .object({
       id: bigIntId,
-      email: z.string(),
-      first_name: z.string(),
-      last_name: z.string(),
+      email: z.string().optional(),
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
     })
-    .nullable(),
+    .nullable()
+    .optional(),
   line_items: z.array(
     z.object({
       id: bigIntId,
@@ -29,7 +30,7 @@ export const OrderPayloadSchema = z.object({
       variant_id: z
         .union([z.string(), z.number()])
         .transform(String)
-        .nullable(),
+        .nullish(),
     }),
   ),
 });
