@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
 
@@ -16,6 +17,10 @@ describe('WebhooksController', () => {
             handleOrderCreated: jest.fn(),
             handleProductUpdated: jest.fn(),
           },
+        },
+        {
+          provide: getQueueToken('webhook-processing'),
+          useValue: { add: jest.fn() },
         },
       ],
     }).compile();
