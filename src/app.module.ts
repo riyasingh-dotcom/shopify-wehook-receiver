@@ -10,9 +10,14 @@ import { ExpressAdapter } from '@bull-board/express';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRootAsync({
-      useFactory: (config: ConfigService) => ({
-        connection: { url: config.getOrThrow<string>('REDIS_URL') },
-      }),
+      useFactory: (config: ConfigService) => {
+        const restUrl = config.getOrThrow<string>('UPSTASH_REDIS_REST_URL');
+        const host = new URL(restUrl).hostname;
+        const password = config.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN');
+        return {
+          connection: { host, port: 6379, password, tls: {} },
+        };
+      },
       inject: [ConfigService],
     }),
     BullBoardModule.forRoot({
