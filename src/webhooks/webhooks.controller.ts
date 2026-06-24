@@ -1,15 +1,17 @@
 import {
   Controller,
+  Get,
   HttpCode,
   Logger,
   Post,
+  Query,
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Request } from 'express';
-import { WebhooksService } from './webhooks.service';
+import { WebhooksService, type WebhookEventDto } from './webhooks.service';
 import type { WebhookJobData } from './webhooks.types';
 
 @Controller('webhooks')
@@ -21,6 +23,11 @@ export class WebhooksController {
     @InjectQueue('webhook-processing')
     private readonly queue: Queue<WebhookJobData>,
   ) {}
+
+  @Get('events')
+  async getEvents(@Query('topic') topic = 'all'): Promise<WebhookEventDto[]> {
+    return this.webhooksService.getEvents(topic);
+  }
 
   @Post('shopify')
   @HttpCode(200)

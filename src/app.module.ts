@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
@@ -26,6 +27,7 @@ import { ExpressAdapter } from '@bull-board/express';
     }),
     PrismaModule,
     WebhooksModule,
+    DashboardModule,
   ],
   controllers: [],
   providers: [],

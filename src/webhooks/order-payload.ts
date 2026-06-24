@@ -27,10 +27,7 @@ export const OrderPayloadSchema = z.object({
       title: z.string(),
       quantity: z.number().int().positive(),
       price: z.string(),
-      variant_id: z
-        .union([z.string(), z.number()])
-        .transform(String)
-        .nullish(),
+      variant_id: z.union([z.string(), z.number()]).transform(String).nullish(),
     }),
   ),
 });

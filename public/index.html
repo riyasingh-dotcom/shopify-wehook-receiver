@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webhook Events</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f6f8;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .refresh-status {
+      font-size: 0.78rem;
+      color: #8b8fa8;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .controls label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #555;
+    }
+
+    select {
+      padding: 7px 12px;
+      border: 1px solid #dde1ea;
+      border-radius: 7px;
+      font-size: 0.875rem;
+      background: #fff;
+      color: #1a1a2e;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    select:focus { border-color: #6366f1; }
+
+    /* Card wrapper */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e8eaef;
+      overflow: hidden;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 11px 18px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b8fa8;
+      background: #fafbfc;
+      border-bottom: 1px solid #e8eaef;
+    }
+
+    tbody tr {
+      transition: background 0.1s;
+      cursor: pointer;
+    }
+
+    tbody tr:hover td { background: #f8f9ff; }
+
+    tbody td {
+      padding: 13px 18px;
+      font-size: 0.875rem;
+      border-bottom: 1px solid #f0f2f7;
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+
+    /* Topic badges */
+    .badge-orders   { background: #fef3c7; color: #92400e; }
+    .badge-products { background: #d1fae5; color: #065f46; }
+    .badge-default  { background: #ede9fe; color: #5b21b6; }
+
+    /* Status badges */
+    .badge-received  { background: #f3f4f6; color: #374151; }
+    .badge-processed { background: #d1fae5; color: #065f46; }
+    .badge-failed    { background: #fee2e2; color: #991b1b; }
+
+    .shop-domain {
+      color: #555;
+      font-size: 0.82rem;
+    }
+
+    .time-cell {
+      color: #8b8fa8;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .payload-preview {
+      font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      color: #8b8fa8;
+      max-width: 240px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: none;
+      padding: 72px 20px;
+      text-align: center;
+      color: #8b8fa8;
+    }
+
+    .empty-icon {
+      font-size: 2.8rem;
+      margin-bottom: 14px;
+      opacity: 0.6;
+    }
+
+    .empty-state p {
+      font-size: 0.95rem;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 15, 30, 0.45);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: #fff;
+      border-radius: 12px;
+      width: 100%;
+      max-width: 660px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #e8eaef;
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #8b8fa8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+
+    .modal-close:hover { background: #f0f2f7; color: #1a1a2e; }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    pre {
+      background: #f8f9fc;
+      border: 1px solid #e8eaef;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #2d3048;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Webhook Events</h1>
+    <span class="refresh-status" id="refresh-status">Auto-refreshes every 30s</span>
+  </header>
+
+  <div class="controls">
+    <label for="topic-filter">Filter:</label>
+    <select id="topic-filter">
+      <option value="all">All Events</option>
+      <option value="orders">Orders</option>
+      <option value="products">Products</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Topic</th>
+          <th>Shop Domain</th>
+          <th>Time</th>
+          <th>Status</th>
+          <th>Payload Preview</th>
+        </tr>
+      </thead>
+      <tbody id="events-body"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">&#128235;</div>
+      <p>No webhook events yet</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Event Payload</span>
+      <button class="modal-close" id="modal-close" aria-label="Close modal">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <pre id="modal-content"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  'use strict';
+
+  var tbody       = document.getElementById('events-body');
+  var emptyState  = document.getElementById('empty-state');
+  var filterSel   = document.getElementById('topic-filter');
+  var backdrop    = document.getElementById('modal-backdrop');
+  var modalClose  = document.getElementById('modal-close');
+  var modalTitle  = document.getElementById('modal-title');
+  var modalPre    = document.getElementById('modal-content');
+  var refreshLbl  = document.getElementById('refresh-status');
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function relTime(iso) {
+    var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60)   return diff + 's ago';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  }
+
+  function topicClass(topic) {
+    if (topic.indexOf('orders/')   === 0) return 'badge badge-orders';
+    if (topic.indexOf('products/') === 0) return 'badge badge-products';
+    return 'badge badge-default';
+  }
+
+  function statusClass(status) {
+    if (status === 'processed') return 'badge badge-processed';
+    if (status === 'failed')    return 'badge badge-failed';
+    return 'badge badge-received';
+  }
+
+  function payloadPreview(payload) {
+    var str = (typeof payload === 'string') ? payload : JSON.stringify(payload);
+    return str.length > 100 ? str.slice(0, 100) + '…' : str;
+  }
+
+  function openModal(topic, payload) {
+    modalTitle.textContent = topic;
+    modalPre.textContent   = JSON.stringify(payload, null, 2);
+    backdrop.classList.add('open');
+  }
+
+  function closeModal() {
+    backdrop.classList.remove('open');
+  }
+
+  function renderRows(events) {
+    var html = '';
+    for (var i = 0; i < events.length; i++) {
+      var e = events[i];
+      html +=
+        '<tr data-idx="' + i + '">' +
+        '<td><span class="' + topicClass(e.topic) + '">' + escHtml(e.topic) + '</span></td>' +
+        '<td class="shop-domain">' + escHtml(e.shopDomain) + '</td>' +
+        '<td class="time-cell">'   + escHtml(relTime(e.createdAt)) + '</td>' +
+        '<td><span class="' + statusClass(e.status) + '">' + escHtml(e.status) + '</span></td>' +
+        '<td><span class="payload-preview">' + escHtml(payloadPreview(e.payload)) + '</span></td>' +
+        '</tr>';
+    }
+    return html;
+  }
+
+  var lastEvents = [];
+
+  function attachRowListeners() {
+    var rows = tbody.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i++) {
+      (function(idx) {
+        rows[idx].addEventListener('click', function() {
+          var e = lastEvents[idx];
+          if (e) openModal(e.topic, e.payload);
+        });
+      })(i);
+    }
+  }
+
+  function render(events) {
+    if (!events || events.length === 0) {
+      tbody.innerHTML       = '';
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    // Update innerHTML without resetting scroll
+    tbody.innerHTML = renderRows(events);
+    lastEvents = events;
+    attachRowListeners();
+  }
+
+  async function fetchEvents() {
+    var topic = filterSel.value;
+    var url   = '/webhooks/events' + (topic !== 'all' ? '?topic=' + encodeURIComponent(topic) : '');
+
+    var scrollY = window.pageYOffset;
+
+    try {
+      var res    = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var events = await res.json();
+
+      render(events);
+
+      // Restore scroll without animation to prevent layout jump
+      window.scrollTo(0, scrollY);
+
+      var t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      refreshLbl.textContent = 'Last updated: ' + t + ' · Auto-refreshes every 30s';
+    } catch (err) {
+      console.error('Failed to fetch events:', err);
+      refreshLbl.textContent = 'Refresh failed — retrying in 30s';
+    }
+  }
+
+  // Filter change triggers immediate reload
+  filterSel.addEventListener('change', function() { fetchEvents(); });
+
+  // Modal close handlers
+  modalClose.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', function(e) {
+    if (e.target === backdrop) closeModal();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // Boot
+  fetchEvents();
+  setInterval(fetchEvents, 30000);
+</script>
+
+</body>
+</html>
