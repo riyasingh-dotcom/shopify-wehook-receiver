@@ -120,12 +120,19 @@ export class WebhooksService {
     }));
   }
 
-  async handleProductUpdated(raw: unknown, shopDomain: string): Promise<void> {
+  async handleProductUpdated(
+    raw: unknown,
+    shopDomain: string,
+  ): Promise<string | null> {
     const obj = isJsonObject(raw) ? raw : {};
     const id = obj['id'];
     const shopifyId =
       typeof id === 'string' || typeof id === 'number' ? String(id) : '';
     const title = typeof obj['title'] === 'string' ? obj['title'] : 'unknown';
+    const updatedAt =
+      typeof obj['updated_at'] === 'string'
+        ? obj['updated_at']
+        : new Date().toISOString();
 
     this.logger.log(
       `products/update id=${shopifyId} title="${title}" shop=${shopDomain}`,
@@ -173,5 +180,28 @@ export class WebhooksService {
       }),
       ...changeLogOps,
     ]);
+
+    // Step 5: write a WebhookEvent so the dashboard can display this update.
+    // Idempotency key = productId + updatedAt so Shopify retries of the same
+    // delivery are silently skipped, but genuine new updates create a new row.
+    try {
+      const event = await this.prisma.webhookEvent.create({
+        data: {
+          topic: 'products/update',
+          shopDomain,
+          shopifyId: `${shopifyId}-${updatedAt}`,
+          payload: raw as Prisma.InputJsonValue,
+        },
+      });
+      return event.id;
+    } catch (err: unknown) {
+      if (isPrismaUniqueConstraintError(err)) {
+        this.logger.warn(
+          `duplicate products/update shopifyId=${shopifyId} updatedAt=${updatedAt} — skipped`,
+        );
+        return null;
+      }
+      throw err;
+    }
   }
 }

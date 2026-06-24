@@ -27,7 +27,10 @@ export class WebhookProcessor extends WorkerHost {
           );
           break;
         case 'products/update':
-          await this.webhooksService.handleProductUpdated(payload, shopDomain);
+          eventId = await this.webhooksService.handleProductUpdated(
+            payload,
+            shopDomain,
+          );
           break;
         default:
           this.logger.warn(`job=${job.id} unhandled topic=${topic}`);
