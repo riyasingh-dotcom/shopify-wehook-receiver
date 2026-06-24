@@ -56,3 +56,29 @@
 
 ## One thing I'm not sure I understand:
 - The best practice for building scalable diff + audit systems (especially how to handle concurrent product updates, ordering of webhook events, and ensuring no data is lost when multiple updates arrive quickly)
+
+# Day 4 Flag
+
+## Built:
+- Implemented BullMQ with Redis for processing Shopify webhooks asynchronously
+- Moved webhook handling to job-based processing for better reliability and scalability
+- Added Bull Board dashboard to monitor queues, jobs, and failures in real time
+- Designed staging deployment flow for CI/CD pipeline (partially implemented)
+
+## Staging URL:
+- Not available yet (staging deployment not fully functional due to Railway CLI authentication issue)
+
+## BullMQ job retry tested:
+- Yes  
+  - Verified retry behavior for failed jobs using BullMQ retry mechanism
+
+## CD pipeline:
+- Staging deployment pipeline written but not fully working
+- Issue encountered in Railway CLI authentication:
+  - Railway does not provide a usable CLI token in expected format
+  - GitHub secret integration attempted but token parsing/auth failed
+  - As a result, automatic deployment step is currently commented out in `ci.yaml`
+- Estimated staging deploy time (from merge to live): Not measured yet due to incomplete CD setup
+
+## One thing I'm not sure I understand:
+- How Railway CI/CD authentication is supposed to work correctly with GitHub Actions (especially the difference between Railway CLI login, API tokens, and project-based deployment IDs), and why the token format I received is not compatible with the CI pipeline setup I implemented
