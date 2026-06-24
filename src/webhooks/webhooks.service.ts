@@ -89,28 +89,34 @@ export class WebhooksService {
   }
 
   async getEvents(topic: string): Promise<WebhookEventDto[]> {
-    const where: Prisma.WebhookEventWhereInput =
-      topic === 'orders'
-        ? { topic: { startsWith: 'orders/' } }
-        : topic === 'products'
-          ? { topic: { startsWith: 'products/' } }
-          : {};
+    const fetchOrders = topic === 'all' || topic === 'orders';
+    const fetchProducts = topic === 'all' || topic === 'products';
 
-    const events = await this.prisma.webhookEvent.findMany({
-      where,
-      orderBy: { receivedAt: 'desc' },
-      take: 50,
-      select: {
-        id: true,
-        topic: true,
-        shopDomain: true,
-        payload: true,
-        status: true,
-        receivedAt: true,
-      },
-    });
+    const [webhookEvents, changeLogs] = await Promise.all([
+      fetchOrders
+        ? this.prisma.webhookEvent.findMany({
+            where: { topic: { startsWith: 'orders/' } },
+            orderBy: { receivedAt: 'desc' },
+            take: 50,
+            select: {
+              id: true,
+              topic: true,
+              shopDomain: true,
+              payload: true,
+              status: true,
+              receivedAt: true,
+            },
+          })
+        : Promise.resolve([]),
+      fetchProducts
+        ? this.prisma.productChangeLog.findMany({
+            orderBy: { changedAt: 'desc' },
+            take: 50,
+          })
+        : Promise.resolve([]),
+    ]);
 
-    return events.map((e) => ({
+    const orderDtos: WebhookEventDto[] = webhookEvents.map((e) => ({
       id: e.id,
       topic: e.topic,
       shopDomain: e.shopDomain,
@@ -118,6 +124,39 @@ export class WebhooksService {
       status: e.status,
       createdAt: e.receivedAt,
     }));
+
+    if (changeLogs.length === 0) {
+      return orderDtos
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 50);
+    }
+
+    // Look up shopDomain for each product via the Product snapshot table
+    const productIds = [...new Set(changeLogs.map((c) => c.shopifyId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, shopDomain: true },
+    });
+    const shopDomainMap = new Map(products.map((p) => [p.id, p.shopDomain]));
+
+    const productDtos: WebhookEventDto[] = changeLogs.map((c) => ({
+      id: c.id,
+      topic: 'products/update',
+      shopDomain: shopDomainMap.get(c.shopifyId) ?? 'unknown',
+      payload: {
+        productTitle: c.productTitle,
+        field: c.field,
+        oldValue: c.oldValue ?? null,
+        newValue: c.newValue,
+        productId: c.shopifyId,
+      } as Prisma.JsonValue,
+      status: 'processed',
+      createdAt: c.changedAt,
+    }));
+
+    return [...orderDtos, ...productDtos]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 50);
   }
 
   async handleProductUpdated(
