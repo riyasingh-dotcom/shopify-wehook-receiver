@@ -14,7 +14,7 @@ async function main() {
     },
   });
 
-  console.log('Inserted:', JSON.stringify(event, null, 2));
+  process.stdout.write('Inserted: ' + JSON.stringify(event, null, 2) + '\n');
 }
 
 main()
