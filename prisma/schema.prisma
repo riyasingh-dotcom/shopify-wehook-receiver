@@ -14,7 +14,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-
 model WebhookEvent {
   id          String   @id @default(cuid())
   topic       String
