@@ -1,20 +1,29 @@
 import {
   Controller,
+  HttpCode,
   Logger,
   Post,
   Req,
   UnauthorizedException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import type { Request } from 'express';
 import { WebhooksService } from './webhooks.service';
+import type { WebhookJobData } from './webhooks.types';
 
 @Controller('webhooks')
 export class WebhooksController {
   private readonly logger = new Logger(WebhooksController.name);
 
-  constructor(private readonly webhooksService: WebhooksService) {}
+  constructor(
+    private readonly webhooksService: WebhooksService,
+    @InjectQueue('webhook-processing')
+    private readonly queue: Queue<WebhookJobData>,
+  ) {}
 
   @Post('shopify')
+  @HttpCode(200)
   async handleShopify(@Req() req: Request): Promise<void> {
     const signature = req.headers['x-shopify-hmac-sha256'];
     const topic = req.headers['x-shopify-topic'];
@@ -29,20 +38,34 @@ export class WebhooksController {
       throw new UnauthorizedException();
     }
 
+    const payload: unknown = JSON.parse(rawBody.toString('utf8'));
+    const obj =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {};
+    const idVal = obj['id'];
+    const shopifyId =
+      typeof idVal === 'string' || typeof idVal === 'number'
+        ? String(idVal)
+        : '';
+
     const normalizedTopic = typeof topic === 'string' ? topic : 'unknown';
     const normalizedDomain =
       typeof shopDomain === 'string' ? shopDomain : 'unknown';
-    const raw: unknown = JSON.parse(rawBody.toString('utf8'));
 
-    switch (normalizedTopic) {
-      case 'orders/create':
-        await this.webhooksService.handleOrderCreated(raw, normalizedDomain);
-        break;
-      case 'products/update':
-        await this.webhooksService.handleProductUpdated(raw, normalizedDomain);
-        break;
-      default:
-        this.logger.warn(`Unhandled webhook topic: ${normalizedTopic}`);
-    }
+    await this.queue.add(
+      'process',
+      {
+        topic: normalizedTopic,
+        shopDomain: normalizedDomain,
+        shopifyId,
+        payload,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
+
+    this.logger.log(
+      `queued job topic=${normalizedTopic} shopifyId=${shopifyId}`,
+    );
   }
 }
