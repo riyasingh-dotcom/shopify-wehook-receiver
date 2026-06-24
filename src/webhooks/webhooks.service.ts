@@ -6,6 +6,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { parseOrderPayload } from './order-payload';
 import { detectProductChanges } from './product-diff';
 
+export type WebhookEventDto = {
+  id: string;
+  topic: string;
+  shopDomain: string;
+  payload: Prisma.JsonValue;
+  status: string;
+  createdAt: Date;
+};
+
 function isJsonObject(
   val: unknown,
 ): val is { [key: string]: Prisma.InputJsonValue | null | undefined } {
@@ -77,6 +86,38 @@ export class WebhooksService {
       where: { id },
       data: { status: 'processed', processedAt: new Date() },
     });
+  }
+
+  async getEvents(topic: string): Promise<WebhookEventDto[]> {
+    const where: Prisma.WebhookEventWhereInput =
+      topic === 'orders'
+        ? { topic: { startsWith: 'orders/' } }
+        : topic === 'products'
+          ? { topic: { startsWith: 'products/' } }
+          : {};
+
+    const events = await this.prisma.webhookEvent.findMany({
+      where,
+      orderBy: { receivedAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        topic: true,
+        shopDomain: true,
+        payload: true,
+        status: true,
+        receivedAt: true,
+      },
+    });
+
+    return events.map((e) => ({
+      id: e.id,
+      topic: e.topic,
+      shopDomain: e.shopDomain,
+      payload: e.payload,
+      status: e.status,
+      createdAt: e.receivedAt,
+    }));
   }
 
   async handleProductUpdated(raw: unknown, shopDomain: string): Promise<void> {
