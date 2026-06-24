@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 1. Lint — catches style/rule violations before the compiler runs.
+      #    Linting is faster than type-checking, so failing here saves time.
+      #    Note: --fix is in the script but changes are discarded after the run.
+      #    If lint exits non-zero, the job stops here (GitHub Actions default).
+      - name: Lint
+        run: pnpm run lint
+
+
+      # 2. Type-check — no emit, just validates types across the whole project.
+      - name: Type check
+        run: pnpm tsc --noEmit
+
+
+      # 3. Build — only runs if both lint and typecheck pass.
+      - name: Build
+        run: pnpm run build
+
+      # 4. Unit tests — runs after a successful build.
+      - name: Test
+        run: pnpm test
