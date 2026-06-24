@@ -71,34 +71,34 @@ jobs:
       - name: Build
         run: pnpm run build
 
-  deploy:
-    name: Deploy to staging
-    needs: [lint, typecheck, test, build]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
+  # deploy:
+  #   name: Deploy to staging
+  #   needs: [lint, typecheck, test, build]
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
+  #     - name: Install Railway CLI
+  #       run: npm install -g @railway/cli
 
-      - name: Check secret exists
-        run: |
-          if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "::error::RAILWAY_TOKEN secret is not set"
-            exit 1
-          else
-            echo "RAILWAY_TOKEN is present"
-          fi
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  #     - name: Check secret exists
+  #       run: |
+  #         if [ -z "$RAILWAY_TOKEN" ]; then
+  #           echo "::error::RAILWAY_TOKEN secret is not set"
+  #           exit 1
+  #         else
+  #           echo "RAILWAY_TOKEN is present"
+  #         fi
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-      - name: Check Railway auth
-        run: railway whoami
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  #     - name: Check Railway auth
+  #       run: railway whoami
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-      - name: Deploy to Railway
-        run: railway up --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  #     - name: Deploy to Railway
+  #       run: railway up --detach
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
