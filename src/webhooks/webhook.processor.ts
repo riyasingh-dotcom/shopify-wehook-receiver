@@ -18,22 +18,30 @@ export class WebhookProcessor extends WorkerHost {
 
     let eventId: string | null = null;
 
-    switch (topic) {
-      case 'orders/create':
-        eventId = await this.webhooksService.handleOrderCreated(
-          payload,
-          shopDomain,
-        );
-        break;
-      case 'products/update':
-        await this.webhooksService.handleProductUpdated(payload, shopDomain);
-        break;
-      default:
-        this.logger.warn(`job=${job.id} unhandled topic=${topic}`);
-    }
+    try {
+      switch (topic) {
+        case 'orders/create':
+          eventId = await this.webhooksService.handleOrderCreated(
+            payload,
+            shopDomain,
+          );
+          break;
+        case 'products/update':
+          await this.webhooksService.handleProductUpdated(payload, shopDomain);
+          break;
+        default:
+          this.logger.warn(`job=${job.id} unhandled topic=${topic}`);
+      }
 
-    if (eventId !== null) {
-      await this.webhooksService.markProcessed(eventId);
+      if (eventId !== null) {
+        await this.webhooksService.markProcessed(eventId);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `job=${job.id} topic=${topic} shopifyId=${shopifyId} FAILED: ${message}`,
+      );
+      throw err;
     }
   }
 }
