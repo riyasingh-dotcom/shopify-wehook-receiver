@@ -41,3 +41,13 @@ model ProductChangeLog {
   newValue    String
   changedAt   DateTime @default(now())
 }
+
+model FailedJob {
+  id           String   @id @default(cuid())
+  jobId        String
+  queueName    String
+  jobData      Json
+  errorMessage String
+  attemptsMade Int
+  failedAt     DateTime @default(now())
+}
