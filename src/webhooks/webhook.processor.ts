@@ -1,15 +1,47 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { WebhooksService } from './webhooks.service';
+import { PrismaService } from '../prisma/prisma.service';
 import type { WebhookJobData } from './webhooks.types';
 
 @Processor('webhook-processing')
 export class WebhookProcessor extends WorkerHost {
   private readonly logger = new Logger(WebhookProcessor.name);
 
-  constructor(private readonly webhooksService: WebhooksService) {
+  constructor(
+    private readonly webhooksService: WebhooksService,
+    private readonly prisma: PrismaService,
+  ) {
     super();
+  }
+
+  @OnWorkerEvent('failed')
+  async handleFailed(
+    job: Job<WebhookJobData> | undefined,
+    error: Error,
+  ): Promise<void> {
+    if (!job) return;
+
+    const isPermanent = job.attemptsMade >= (job.opts.attempts ?? 1);
+    if (!isPermanent) return;
+
+    const { topic, shopDomain } = job.data;
+
+    this.logger.error(
+      `PERMANENT FAILURE jobId=${job.id} jobName=${job.name} topic=${topic} ` +
+        `shop=${shopDomain} attempts=${job.attemptsMade} error=${error.message}`,
+    );
+
+    await this.prisma.failedJob.create({
+      data: {
+        jobId: String(job.id),
+        queueName: 'webhook-processing',
+        jobData: job.data as object,
+        errorMessage: error.message,
+        attemptsMade: job.attemptsMade,
+      },
+    });
   }
 
   async process(job: Job<WebhookJobData>): Promise<void> {
