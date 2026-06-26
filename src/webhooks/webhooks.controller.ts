@@ -29,6 +29,12 @@ export class WebhooksController {
     return this.webhooksService.getEvents(topic);
   }
 
+  @Get('failed-count')
+  async getFailedCount(): Promise<{ count: number }> {
+    const count = await this.webhooksService.getFailedJobCount();
+    return { count };
+  }
+
   @Post('shopify')
   @HttpCode(200)
   async handleShopify(@Req() req: Request): Promise<void> {

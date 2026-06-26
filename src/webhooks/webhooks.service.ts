@@ -157,6 +157,10 @@ export class WebhooksService {
       .slice(0, 50);
   }
 
+  async getFailedJobCount(): Promise<number> {
+    return this.prisma.failedJob.count();
+  }
+
   async handleProductUpdated(
     raw: unknown,
     shopDomain: string,

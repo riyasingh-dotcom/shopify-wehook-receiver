@@ -77,3 +77,21 @@ BullMQ is a Node.js job queue system that lets you manage background tasks relia
 
 **Answer:**  
 The producer/consumer pattern splits work into two roles: the producer is your NestJS webhook handler that receives Shopify events and pushes them into the queue (it produces jobs but doesn’t process them). The consumer is a separate worker process that listens to the queue, pulls jobs when available, and executes the actual business logic like saving to the database or updating records. This separation ensures your API stays fast and lightweight, while heavy processing is handled independently and can scale horizontally by adding more consumers.
+
+
+
+## Why Polaris exists
+Shopify built Polaris so that every surface inside the admin — their own pages and third-party apps alike — shares the same visual language, interaction patterns, and accessibility standards. Rather than each app team solving the same UI problems independently, Polaris centralizes those decisions: spacing scales, color tokens, component behavior, motion, and screen-reader support are all pre-solved. It also lets Shopify evolve the admin's look (dark mode, new brand refresh, etc.) across every app at once by updating tokens rather than asking hundreds of developers to restyle their UIs.
+
+## Merchant experience and App Store expectations
+For merchants an embedded app built on Polaris feels like a native part of the admin rather than a foreign iframe — the typography, button styles, and navigation patterns match exactly what they use all day, which lowers cognitive load and builds trust. From Shopify's side, apps submitted to the App Store are reviewed against their app requirements, and using App Bridge alongside Polaris is effectively a prerequisite for Built for Shopify status and a smooth review. Apps that skip Polaris aren't automatically rejected, but they tend to fail review on UX criteria (inconsistent design, accessibility gaps, not feeling "native" to the admin), and they're ineligible for the higher-tier badging that drives discovery and conversion on the store.
+
+## Explain Jest unit testing to me as a NestJS developer.
+- What exactly is a "unit" in unit testing?
+- What is a mock, and why do I need to mock Prisma in my tests?
+- What is the difference between testing "does this function return the right value"
+  vs testing "does this function call the right database method"?
+
+Answer:In NestJS, a unit is a single class in isolation — typically a service like WebhooksService. The goal is to test that class's logic without involving anything outside it: no real database, no HTTP, no queue. When you test handleOrderCreated, you're asking "given this input, does my code do the right thing?" — not "does Postgres accept this query?" A unit test runs in milliseconds because it never touches the network or disk. The "unit" boundary is the class; everything the class depends on (Prisma, BullMQ, other services) gets replaced with fakes.
+
+A mock is that fake replacement. Prisma is a dependency you inject into WebhooksService, so in tests you substitute it with an object that has the same shape but does nothing real — its methods are jest.fn() spies that return whatever you tell them to. This matters for two reasons. First, your tests stay deterministic and fast. Second, it lets you make a precise claim: "my service logic is correct assuming Prisma works." That splits into two distinct assertions you can make. Testing return value means: given a mocked Prisma that returns a fake order, does handleOrderCreated return the processed result I expect? Testing call behavior means: does handleOrderCreated actually call prisma.webhookEvent.create with the right arguments? Both matter — the first catches logic bugs, the second catches "I forgot to persist anything" bugs. In NestJS services you often want both: verify the output shape and verify the DB write happened with the right data.

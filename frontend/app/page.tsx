@@ -13,6 +13,10 @@ import {
   InlineStack,
   Layout,
   Page,
+  SkeletonBodyText,
+  SkeletonDisplayText,
+  SkeletonPage,
+  SkeletonTabs,
   Spinner,
   Tabs,
   Text,
@@ -150,13 +154,88 @@ function StatCard({
   );
 }
 
-function LoadingPanel() {
+const SKELETON_COL_WIDTHS = [
+  '6ch',
+  '10ch',
+  '24ch',
+  '10ch',
+  '9ch',
+  '10ch',
+] as const;
+
+function Loadingskeleton() {
   return (
-    <Box paddingBlock="1600">
-      <BlockStack align="center" inlineAlign="center">
-        <Spinner accessibilityLabel="Loading events" />
-      </BlockStack>
-    </Box>
+    <SkeletonPage title="Activity Feed" fullWidth primaryAction>
+      <Layout>
+        {/* 3-column KPI stat cards: label / big value / help text */}
+        <Layout.Section>
+          <Grid>
+            {[0, 1, 2].map((i) => (
+              <Grid.Cell
+                key={i}
+                columnSpan={{ xs: 6, sm: 2, md: 4, lg: 4, xl: 4 }}
+              >
+                <Card>
+                  <BlockStack gap="200">
+                    <SkeletonBodyText lines={1} />
+                    <SkeletonDisplayText size="large" />
+                    <SkeletonBodyText lines={1} />
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+            ))}
+          </Grid>
+        </Layout.Section>
+
+        {/* Activity card: header + tabs + column headers + data rows */}
+        <Layout.Section>
+          <Card padding="0">
+            {/* "Recent Activity" title (left) + Live badge (right) */}
+            <Box paddingBlock="400" paddingInline="400">
+              <InlineStack align="space-between" blockAlign="center">
+                <SkeletonDisplayText size="small" maxWidth="14ch" />
+                <SkeletonDisplayText size="small" maxWidth="4ch" />
+              </InlineStack>
+            </Box>
+
+            {/* Orders / Product Audit Log tabs */}
+            <SkeletonTabs count={2} fitted />
+
+            {/* Column header row — widths match Order/Customer/Items/Total/Payment/Received */}
+            <Box
+              paddingBlock="300"
+              paddingInline="400"
+              background="bg-surface-secondary"
+            >
+              <InlineStack gap="400" wrap={false}>
+                {SKELETON_COL_WIDTHS.map((w, i) => (
+                  <SkeletonDisplayText key={i} size="small" maxWidth={w} />
+                ))}
+              </InlineStack>
+            </Box>
+
+            {/* Data rows — same 6-cell layout as the IndexTable rows */}
+            <BlockStack>
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <Box
+                  key={i}
+                  paddingBlock="400"
+                  paddingInline="400"
+                  borderBlockStartWidth="025"
+                  borderColor="border"
+                >
+                  <InlineStack gap="400" wrap={false}>
+                    {SKELETON_COL_WIDTHS.map((w, j) => (
+                      <SkeletonDisplayText key={j} size="small" maxWidth={w} />
+                    ))}
+                  </InlineStack>
+                </Box>
+              ))}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </SkeletonPage>
   );
 }
 
@@ -194,6 +273,7 @@ const POLL_INTERVAL_MS = 30_000;
 export default function DashboardPage() {
   const authenticatedFetch = useAuthenticatedFetch();
   const [events, setEvents] = useState<WebhookEvent[]>([]);
+  const [failedCount, setFailedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -206,10 +286,18 @@ export default function DashboardPage() {
       else setLoading(true);
       setError(null);
       try {
-        const res = await authenticatedFetch('/webhooks/events');
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const data = (await res.json()) as WebhookEvent[];
+        const [eventsRes, failedRes] = await Promise.all([
+          authenticatedFetch('/webhooks/events'),
+          authenticatedFetch('/webhooks/failed-count'),
+        ]);
+        if (!eventsRes.ok)
+          throw new Error(`Server returned ${eventsRes.status}`);
+        const data = (await eventsRes.json()) as WebhookEvent[];
         setEvents(data);
+        if (failedRes.ok) {
+          const { count } = (await failedRes.json()) as { count: number };
+          setFailedCount(count);
+        }
         setLastUpdated(new Date());
       } catch (err) {
         if (!silent)
@@ -253,6 +341,8 @@ export default function DashboardPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  if (loading) return <Loadingskeleton />;
+
   return (
     <Page
       fullWidth
@@ -267,6 +357,21 @@ export default function DashboardPage() {
       ]}
     >
       <Layout>
+        {/* Failed jobs banner */}
+        {failedCount > 0 && (
+          <Layout.Section>
+            <Banner
+              tone="critical"
+              title={`${failedCount} job${failedCount === 1 ? '' : 's'} failed processing`}
+            >
+              <p>
+                Check your Dead Letter Queue to review and retry failed webhook
+                jobs.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         {/* KPI row */}
         <Layout.Section>
           <Grid>
@@ -332,9 +437,7 @@ export default function DashboardPage() {
             )}
 
             <Tabs tabs={TABS} selected={tab} onSelect={setTab} fitted>
-              {loading ? (
-                <LoadingPanel />
-              ) : tab === 0 ? (
+              {tab === 0 ? (
                 orderEvents.length > 0 ? (
                   <IndexTable
                     resourceName={{ singular: 'order', plural: 'orders' }}
