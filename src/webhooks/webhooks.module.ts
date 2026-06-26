@@ -5,6 +5,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
 import { WebhookProcessor } from './webhook.processor';
+import { ProductsController } from '../products/products.controller';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { WebhookProcessor } from './webhook.processor';
       adapter: BullMQAdapter,
     }),
   ],
-  controllers: [WebhooksController],
+  controllers: [WebhooksController, ProductsController],
   providers: [WebhooksService, WebhookProcessor],
 })
 export class WebhooksModule {}
