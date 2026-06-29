@@ -12,11 +12,28 @@ import { ExpressAdapter } from '@bull-board/express';
     ConfigModule.forRoot({ isGlobal: true }),
     BullModule.forRootAsync({
       useFactory: (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+        if (redisUrl) {
+          const url = new URL(redisUrl);
+          return {
+            connection: {
+              host: url.hostname,
+              port: parseInt(url.port || '6379', 10),
+              ...(url.password ? { password: decodeURIComponent(url.password) } : {}),
+              ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
+            },
+          };
+        }
+        // Upstash fallback for production — high stalledInterval to limit request usage
         const restUrl = config.getOrThrow<string>('UPSTASH_REDIS_REST_URL');
         const host = new URL(restUrl).hostname;
         const password = config.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN');
         return {
           connection: { host, port: 6379, password, tls: {} },
+          defaultWorkerOptions: {
+            stalledInterval: 300_000, // stalled check: every 5 min instead of 30s
+            blockTimeout: 30_000,     // blocking wait: 30s timeout instead of 5s
+          },
         };
       },
       inject: [ConfigService],

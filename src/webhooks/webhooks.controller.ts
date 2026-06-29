@@ -1,8 +1,11 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   Logger,
+  NotFoundException,
+  Param,
   Post,
   Query,
   Req,
@@ -33,6 +36,43 @@ export class WebhooksController {
   async getFailedCount(): Promise<{ count: number }> {
     const count = await this.webhooksService.getFailedJobCount();
     return { count };
+  }
+
+  @Get('failed-jobs')
+  async getFailedJobs() {
+    return this.webhooksService.getFailedJobs();
+  }
+
+  @Delete('failed-jobs')
+  async clearFailedJobs(): Promise<{ deleted: number }> {
+    return this.webhooksService.clearFailedJobs();
+  }
+
+  @Post('events/:id/reprocess')
+  @HttpCode(200)
+  async reprocessEvent(@Param('id') id: string): Promise<void> {
+    const events = await this.webhooksService.getEvents('all');
+    const event = events.find((e) => e.id === id);
+    if (!event) throw new NotFoundException(`Event ${id} not found`);
+
+    await this.queue.add(
+      'process',
+      {
+        topic: event.topic,
+        shopDomain: event.shopDomain,
+        shopifyId: String(
+          typeof event.payload === 'object' &&
+          event.payload !== null &&
+          'id' in event.payload
+            ? event.payload['id']
+            : id,
+        ),
+        payload: event.payload,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
+
+    this.logger.log(`requeued event id=${id} topic=${event.topic}`);
   }
 
   @Post('shopify')

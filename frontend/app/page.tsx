@@ -1,17 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Banner,
   BlockStack,
   Box,
+  Button,
   Card,
   EmptyState,
   Grid,
   IndexTable,
   InlineStack,
   Layout,
+  Modal,
   Page,
   SkeletonBodyText,
   SkeletonDisplayText,
@@ -20,6 +22,7 @@ import {
   Spinner,
   Tabs,
   Text,
+  Toast,
 } from '@shopify/polaris';
 import { useAuthenticatedFetch } from '@/lib/authenticated-fetch';
 
@@ -107,10 +110,10 @@ function paymentBadge(status: string) {
     status === 'paid'
       ? 'success'
       : status === 'refunded'
-        ? 'info' // informational, not actionable
+        ? 'info'
         : status === 'voided'
           ? 'critical'
-          : 'attention'; // pending
+          : 'attention';
   return <Badge tone={tone}>{status}</Badge>;
 }
 
@@ -161,13 +164,14 @@ const SKELETON_COL_WIDTHS = [
   '10ch',
   '9ch',
   '10ch',
+  '8ch',
 ] as const;
 
 function Loadingskeleton() {
   return (
     <SkeletonPage title="Activity Feed" fullWidth primaryAction>
       <Layout>
-        {/* 3-column KPI stat cards: label / big value / help text */}
+        {/* 3-column KPI stat cards */}
         <Layout.Section>
           <Grid>
             {[0, 1, 2].map((i) => (
@@ -187,10 +191,9 @@ function Loadingskeleton() {
           </Grid>
         </Layout.Section>
 
-        {/* Activity card: header + tabs + column headers + data rows */}
+        {/* Activity card */}
         <Layout.Section>
           <Card padding="0">
-            {/* "Recent Activity" title (left) + Live badge (right) */}
             <Box paddingBlock="400" paddingInline="400">
               <InlineStack align="space-between" blockAlign="center">
                 <SkeletonDisplayText size="small" maxWidth="14ch" />
@@ -198,10 +201,8 @@ function Loadingskeleton() {
               </InlineStack>
             </Box>
 
-            {/* Orders / Product Audit Log tabs */}
             <SkeletonTabs count={2} fitted />
 
-            {/* Column header row — widths match Order/Customer/Items/Total/Payment/Received */}
             <Box
               paddingBlock="300"
               paddingInline="400"
@@ -214,7 +215,6 @@ function Loadingskeleton() {
               </InlineStack>
             </Box>
 
-            {/* Data rows — same 6-cell layout as the IndexTable rows */}
             <BlockStack>
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <Box
@@ -256,6 +256,7 @@ const ORDER_HEADINGS: HeadingList = [
   { title: 'Total' },
   { title: 'Payment' },
   { title: 'Received' },
+  { title: 'Actions' },
 ];
 
 const PRODUCT_HEADINGS: HeadingList = [
@@ -264,9 +265,31 @@ const PRODUCT_HEADINGS: HeadingList = [
   { title: 'Before' },
   { title: 'After' },
   { title: 'Changed at' },
+  { title: 'Actions' },
 ];
 
 const POLL_INTERVAL_MS = 30_000;
+
+function formatNewEventsToast(events: WebhookEvent[]): string {
+  if (events.length === 1) {
+    const e = events[0];
+    if (e.topic === 'orders/create' && isOrder(e.payload)) {
+      const p = e.payload as unknown as OrderPayload;
+      return `New order #${p.order_number} received`;
+    }
+    if (e.topic === 'products/update' && isProductChange(e.payload)) {
+      const p = e.payload as unknown as ProductChangePayload;
+      return `${p.productTitle} — ${p.field} changed`;
+    }
+    return '1 new event received';
+  }
+  const orders = events.filter((e) => e.topic === 'orders/create').length;
+  const changes = events.filter((e) => e.topic === 'products/update').length;
+  const parts: string[] = [];
+  if (orders > 0) parts.push(`${orders} new order${orders === 1 ? '' : 's'}`);
+  if (changes > 0) parts.push(`${changes} product change${changes === 1 ? '' : 's'}`);
+  return parts.length > 0 ? parts.join(', ') : `${events.length} new events`;
+}
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
@@ -279,6 +302,11 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [tab, setTab] = useState(0);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [clearDlqModalOpen, setClearDlqModalOpen] = useState(false);
+  const [clearingDlq, setClearingDlq] = useState(false);
+  const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
+  const seenIdsRef = useRef(new Set<string>());
 
   const loadEvents = useCallback(
     async (silent = false) => {
@@ -293,6 +321,12 @@ export default function DashboardPage() {
         if (!eventsRes.ok)
           throw new Error(`Server returned ${eventsRes.status}`);
         const data = (await eventsRes.json()) as WebhookEvent[];
+        const newEvents = data.filter((e) => !seenIdsRef.current.has(e.id));
+        const isFirstLoad = seenIdsRef.current.size === 0;
+        seenIdsRef.current = new Set(data.map((e) => e.id));
+        if (!isFirstLoad && newEvents.length > 0) {
+          setToast({ message: formatNewEventsToast(newEvents), error: false });
+        }
         setEvents(data);
         if (failedRes.ok) {
           const { count } = (await failedRes.json()) as { count: number };
@@ -311,6 +345,43 @@ export default function DashboardPage() {
     },
     [authenticatedFetch],
   );
+
+  const reprocessEvent = useCallback(
+    async (id: string) => {
+      setReprocessingId(id);
+      try {
+        const res = await authenticatedFetch(
+          `/webhooks/events/${id}/reprocess`,
+          { method: 'POST' },
+        );
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        setToast({ message: 'Event reprocessed', error: false });
+        await loadEvents(true);
+      } catch (err) {
+        setToast({ message: err instanceof Error ? err.message : 'Failed to reprocess event', error: true });
+      } finally {
+        setReprocessingId(null);
+      }
+    },
+    [authenticatedFetch, loadEvents],
+  );
+
+  const clearDlq = useCallback(async () => {
+    setClearingDlq(true);
+    try {
+      const res = await authenticatedFetch('/webhooks/failed-jobs', {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      setClearDlqModalOpen(false);
+      setFailedCount(0);
+      setToast({ message: 'Dead Letter Queue cleared', error: false });
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Failed to clear DLQ', error: true });
+    } finally {
+      setClearingDlq(false);
+    }
+  }, [authenticatedFetch]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -363,6 +434,10 @@ export default function DashboardPage() {
             <Banner
               tone="critical"
               title={`${failedCount} job${failedCount === 1 ? '' : 's'} failed processing`}
+              action={{
+                content: 'Clear DLQ',
+                onAction: () => setClearDlqModalOpen(true),
+              }}
             >
               <p>
                 Check your Dead Letter Queue to review and retry failed webhook
@@ -427,10 +502,18 @@ export default function DashboardPage() {
               </InlineStack>
             </Box>
 
-            {/* Error banner */}
+            {/* Error banner with retry */}
             {error && (
               <Box paddingInline="400" paddingBlockEnd="400">
-                <Banner tone="critical" title="Could not load events">
+                <Banner
+                  tone="critical"
+                  title="Could not load events"
+                  action={{
+                    content: 'Try again',
+                    onAction: () => void loadEvents(false),
+                  }}
+                  onDismiss={() => setError(null)}
+                >
                   <p>{error}</p>
                 </Banner>
               </Box>
@@ -470,6 +553,23 @@ export default function DashboardPage() {
                             <Text as="span" tone="subdued">
                               {formatDate(e.createdAt)}
                             </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            {reprocessingId === e.id ? (
+                              <Spinner
+                                size="small"
+                                accessibilityLabel="Reprocessing"
+                              />
+                            ) : (
+                              <Button
+                                variant="plain"
+                                size="slim"
+                                disabled={reprocessingId !== null}
+                                onClick={() => void reprocessEvent(e.id)}
+                              >
+                                Reprocess
+                              </Button>
+                            )}
                           </IndexTable.Cell>
                         </IndexTable.Row>
                       );
@@ -517,6 +617,23 @@ export default function DashboardPage() {
                             {formatDate(e.createdAt)}
                           </Text>
                         </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          {reprocessingId === e.id ? (
+                            <Spinner
+                              size="small"
+                              accessibilityLabel="Reprocessing"
+                            />
+                          ) : (
+                            <Button
+                              variant="plain"
+                              size="slim"
+                              disabled={reprocessingId !== null}
+                              onClick={() => void reprocessEvent(e.id)}
+                            >
+                              Reprocess
+                            </Button>
+                          )}
+                        </IndexTable.Cell>
                       </IndexTable.Row>
                     );
                   })}
@@ -536,6 +653,41 @@ export default function DashboardPage() {
           </Card>
         </Layout.Section>
       </Layout>
+
+      <Modal
+        open={clearDlqModalOpen}
+        onClose={() => setClearDlqModalOpen(false)}
+        title="Clear Dead Letter Queue?"
+        primaryAction={{
+          content: 'Clear all failed jobs',
+          destructive: true,
+          loading: clearingDlq,
+          onAction: () => void clearDlq(),
+        }}
+        secondaryActions={[
+          {
+            content: 'Cancel',
+            onAction: () => setClearDlqModalOpen(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            This permanently deletes all {failedCount} failed job
+            {failedCount === 1 ? '' : 's'} from the queue. They cannot be
+            retried after this.
+          </Text>
+        </Modal.Section>
+      </Modal>
+
+      {toast && (
+        <Toast
+          content={toast.message}
+          error={toast.error}
+          onDismiss={() => setToast(null)}
+          duration={toast.error ? 5000 : 4000}
+        />
+      )}
     </Page>
   );
 }

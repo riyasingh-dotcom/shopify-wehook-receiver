@@ -16,10 +16,11 @@ pnpm start:dev        # dev server with hot reload (port 3000)
 pnpm build            # compile to dist/
 pnpm start:prod       # run compiled output
 pnpm test             # unit tests (src/**/*.spec.ts)
+pnpm test:watch       # unit tests in watch mode
 pnpm test:cov         # unit tests + coverage report
 pnpm test:e2e         # e2e tests (test/jest-e2e.json)
 pnpm lint             # eslint --fix
-pnpm format           # prettier --write
+pnpm tsc --noEmit     # type-check without emitting (matches CI gate)
 
 # Single test file:
 pnpm jest src/webhooks/webhooks.service.spec.ts
@@ -28,6 +29,12 @@ pnpm jest src/webhooks/webhooks.service.spec.ts
 pnpm prisma generate       # regenerate client after schema changes
 pnpm prisma migrate dev    # run migrations (requires DIRECT_URL)
 node scripts/seed.js       # seed a test webhook event
+```
+
+### Docker (alternative to local deps)
+```bash
+docker compose up --build   # first run — builds image, starts Postgres + app
+docker compose up           # subsequent runs (skip rebuild)
 ```
 
 ### Frontend (run from repo root)
@@ -74,6 +81,8 @@ Next.js frontend (embedded in Shopify Admin iframe)
 
 **`src/dashboard/`** — serves `public/index.html` (legacy static dashboard at `GET /`).
 
+**Bull Board** — queue monitor UI at `GET /admin/queues`. Mounted via `BullBoardModule` in `AppModule`. Use it to inspect job states, retry failed jobs manually, and view queue depth.
+
 **`src/auth/shopify-session-token.guard.ts`** — `ShopifySessionTokenGuard`: verifies Shopify session JWT using `@shopify/shopify-api`. Apply with `@UseGuards(ShopifySessionTokenGuard)` on routes the embedded frontend calls. Currently not applied to `GET /webhooks/events` (intentionally, for development).
 
 **`src/prisma/`** — `PrismaModule` and `PrismaService` wrapping `PrismaClient`. Import `PrismaModule` into any feature module that needs DB access.
@@ -88,6 +97,8 @@ Next.js frontend (embedded in Shopify Admin iframe)
 | `FailedJob` | Persistent record of BullMQ jobs that exhausted retries |
 
 **Product change tracking pattern:** `handleProductUpdated` reads the current `Product` snapshot, diffs it with the incoming payload via `detectProductChanges`, then runs a single `$transaction` that upserts the snapshot and creates `ProductChangeLog` rows. The `getEvents` method unifies `WebhookEvent` + `ProductChangeLog` rows into one sorted list for the frontend.
+
+**Processor failure handling:** `WebhookProcessor` only writes a `FailedJob` row when a job has permanently failed — i.e. `attemptsMade >= attempts`. Transient failures (retries still pending) are logged but not persisted. Rethrowing from `process()` is what triggers BullMQ's retry logic.
 
 ### Frontend (`frontend/`)
 

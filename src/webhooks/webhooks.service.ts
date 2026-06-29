@@ -193,6 +193,27 @@ export class WebhooksService {
     return this.prisma.failedJob.count();
   }
 
+  async getFailedJobs(): Promise<
+    {
+      id: string;
+      jobId: string;
+      queueName: string;
+      jobData: unknown;
+      errorMessage: string;
+      attemptsMade: number;
+      failedAt: Date;
+    }[]
+  > {
+    return this.prisma.failedJob.findMany({
+      orderBy: { failedAt: 'desc' },
+    });
+  }
+
+  async clearFailedJobs(): Promise<{ deleted: number }> {
+    const { count } = await this.prisma.failedJob.deleteMany();
+    return { deleted: count };
+  }
+
   async handleProductUpdated(
     raw: unknown,
     shopDomain: string,
