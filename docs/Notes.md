@@ -123,3 +123,12 @@ Test 4 (still calls prisma.create for duplicate events):
 await service.handleOrderCreated(...); // ← throws, test fails here
 expect(prisma.webhookEvent.create).toHaveBeenCalledTimes(1); // ← never runs
 Test 4 also fails if someone replaces the catch with a pre-flight findUnique instead — create would never be called so toHaveBeenCalledTimes(1) would fail. That's the point: it locks in the optimistic-insert contract specifically, not just "idempotency works somehow."
+
+## Hardest thing during this !
+
+the railway deployment- i have deployed it on railway and there are lots or errors occur on that
+- the first is url mismatch due to monorepo structure
+- Second is -- due to custom app like custom next.js project which was embeded in shopify, it creates lots of error and misconfiguration
+- third is maintaining the tunnel during the development.
+- one more docker setup for the frontend.
+- Redis upsatsh limit exceeded due to **BullMQ** becausse its wpker continue polls even there is no webhook event arrives.
