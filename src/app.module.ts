@@ -31,10 +31,18 @@ import { ExpressAdapter } from '@bull-board/express';
         const host = new URL(restUrl).hostname;
         const password = config.getOrThrow<string>('UPSTASH_REDIS_REST_TOKEN');
         return {
-          connection: { host, port: 6379, password, tls: {} },
+          connection: {
+            host,
+            port: 6379,
+            password,
+            tls: {},
+            // don't queue commands while disconnected — fail fast instead
+            enableOfflineQueue: false,
+          },
           defaultWorkerOptions: {
-            stalledInterval: 300_000, // stalled check: every 5 min instead of 30s
-            blockTimeout: 30_000, // blocking wait: 30s timeout instead of 5s
+            stalledInterval: 600_000, // stalled check: every 10 min (144×/day)
+            blockTimeout: 60_000,     // blocking wait: 60s (1440 BLMOVE cmds/day)
+            skipVersionCheck: true,   // skip compat check commands on startup
           },
         };
       },
