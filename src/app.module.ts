@@ -19,7 +19,9 @@ import { ExpressAdapter } from '@bull-board/express';
             connection: {
               host: url.hostname,
               port: parseInt(url.port || '6379', 10),
-              ...(url.password ? { password: decodeURIComponent(url.password) } : {}),
+              ...(url.password
+                ? { password: decodeURIComponent(url.password) }
+                : {}),
               ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
             },
           };
@@ -32,7 +34,7 @@ import { ExpressAdapter } from '@bull-board/express';
           connection: { host, port: 6379, password, tls: {} },
           defaultWorkerOptions: {
             stalledInterval: 300_000, // stalled check: every 5 min instead of 30s
-            blockTimeout: 30_000,     // blocking wait: 30s timeout instead of 5s
+            blockTimeout: 30_000, // blocking wait: 30s timeout instead of 5s
           },
         };
       },

@@ -55,18 +55,22 @@ export class WebhooksController {
     const event = events.find((e) => e.id === id);
     if (!event) throw new NotFoundException(`Event ${id} not found`);
 
+    const p = event.payload;
+    const rawId =
+      typeof p === 'object' && p !== null && !Array.isArray(p) && 'id' in p
+        ? p['id']
+        : undefined;
+    const shopifyId =
+      typeof rawId === 'string' || typeof rawId === 'number'
+        ? String(rawId)
+        : id;
+
     await this.queue.add(
       'process',
       {
         topic: event.topic,
         shopDomain: event.shopDomain,
-        shopifyId: String(
-          typeof event.payload === 'object' &&
-          event.payload !== null &&
-          'id' in event.payload
-            ? event.payload['id']
-            : id,
-        ),
+        shopifyId,
         payload: event.payload,
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },

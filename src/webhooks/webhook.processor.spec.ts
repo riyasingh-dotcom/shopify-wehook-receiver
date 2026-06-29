@@ -5,7 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { Job } from 'bullmq';
 import type { WebhookJobData } from './webhooks.types';
 
-const mockJob = (overrides: Partial<Job<WebhookJobData>> = {}): Job<WebhookJobData> =>
+const mockJob = (
+  overrides: Partial<Job<WebhookJobData>> = {},
+): Job<WebhookJobData> =>
   ({
     id: 'job-1',
     name: 'default',
@@ -44,6 +46,7 @@ describe('WebhookProcessor.handleFailed', () => {
     await processor.handleFailed(job, new Error('db exploded'));
 
     expect(prismaCreate).toHaveBeenCalledWith({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data: expect.objectContaining({
         jobId: 'job-1',
         queueName: 'webhook-processing',
@@ -61,7 +64,9 @@ describe('WebhookProcessor.handleFailed', () => {
   });
 
   it('handles undefined job gracefully', async () => {
-    await expect(processor.handleFailed(undefined, new Error('x'))).resolves.toBeUndefined();
+    await expect(
+      processor.handleFailed(undefined, new Error('x')),
+    ).resolves.toBeUndefined();
     expect(prismaCreate).not.toHaveBeenCalled();
   });
 });

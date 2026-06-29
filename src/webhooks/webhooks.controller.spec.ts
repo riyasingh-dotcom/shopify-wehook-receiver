@@ -5,7 +5,12 @@ import { WebhooksService } from './webhooks.service';
 
 describe('WebhooksController', () => {
   let controller: WebhooksController;
-  let service: { verifyShopifyHmac: jest.Mock; handleOrderCreated: jest.Mock; handleProductUpdated: jest.Mock; getFailedJobCount: jest.Mock };
+  let service: {
+    verifyShopifyHmac: jest.Mock;
+    handleOrderCreated: jest.Mock;
+    handleProductUpdated: jest.Mock;
+    getFailedJobCount: jest.Mock;
+  };
 
   beforeEach(async () => {
     service = {

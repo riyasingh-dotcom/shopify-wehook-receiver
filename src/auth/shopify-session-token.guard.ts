@@ -16,11 +16,11 @@ import '@shopify/shopify-api/adapters/node';
 import type { Request } from 'express';
 
 export type ShopifySessionPayload = JwtPayload & {
-  iss: string;   // https://<shop>.myshopify.com/admin
-  dest: string;  // https://<shop>.myshopify.com
-  aud: string;   // your API key
-  sub: string;   // user ID
-  sid: string;   // session ID
+  iss: string; // https://<shop>.myshopify.com/admin
+  dest: string; // https://<shop>.myshopify.com
+  aud: string; // your API key
+  sub: string; // user ID
+  sid: string; // session ID
 };
 
 /**
@@ -62,8 +62,9 @@ export class ShopifySessionTokenGuard implements CanActivate, OnModuleInit {
     try {
       const payload = await this.shopify.session.decodeSessionToken(token);
 
-      (request as Request & { shopifySession: ShopifySessionPayload }).shopifySession =
-        payload as ShopifySessionPayload;
+      (
+        request as Request & { shopifySession: ShopifySessionPayload }
+      ).shopifySession = payload;
 
       return true;
     } catch {

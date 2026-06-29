@@ -79,6 +79,7 @@ describe('WebhooksService', () => {
           topic: 'orders/create',
           shopDomain: 'test.myshopify.com',
           shopifyId: '987654321', // bigIntId transform coerces number → string
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           payload: expect.objectContaining({
             id: '987654321',
             order_number: 1001,

@@ -1,6 +1,7 @@
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
+import { Prisma } from '@prisma/client';
 import { WebhooksService } from './webhooks.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { WebhookJobData } from './webhooks.types';
@@ -37,7 +38,7 @@ export class WebhookProcessor extends WorkerHost {
       data: {
         jobId: String(job.id),
         queueName: 'webhook-processing',
-        jobData: job.data as object,
+        jobData: job.data as unknown as Prisma.InputJsonValue,
         errorMessage: error.message,
         attemptsMade: job.attemptsMade,
       },
