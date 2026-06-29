@@ -7,6 +7,11 @@ async function bootstrap(): Promise<void> {
   // so HMAC verification has access to the unmodified bytes Shopify signed.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
 
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+
   app.use('/webhooks/shopify', express.raw({ type: 'application/json' }));
   app.use(express.json());
 

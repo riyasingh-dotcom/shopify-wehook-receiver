@@ -82,3 +82,24 @@
 
 ## One thing I'm not sure I understand:
 - How Railway CI/CD authentication is supposed to work correctly with GitHub Actions (especially the difference between Railway CLI login, API tokens, and project-based deployment IDs), and why the token format I received is not compatible with the CI pipeline setup I implemented
+
+
+# Next task
+
+# Day 1 Flag
+
+**Built:**
+
+* Added a Next.js 14 frontend application for the Shopify embedded app.
+* Integrated Shopify App Bridge v4 and configured the application to load inside Shopify Admin.
+* Set up Polaris-based dashboard UI for viewing webhook activity.
+* Implemented a Dead Letter Queue (DLQ) flow for failed BullMQ jobs after maximum retry attempts.
+* Exposed queues through Bull Board for monitoring failed and retriable jobs.
+
+**App Bridge rendering in Shopify Admin:** Yes
+
+**DLQ tested:** Yes
+
+**One thing I'm not sure I understand:**
+
+* The complete lifecycle of Shopify session tokens, specifically how App Bridge obtains, refreshes, and validates them across the frontend and NestJS backend.

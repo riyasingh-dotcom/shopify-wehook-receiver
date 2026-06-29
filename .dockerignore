@@ -9,3 +9,7 @@ coverage
 docs
 scripts
 test
+frontend/node_modules
+frontend/.next
+frontend/.env.local
+frontend/.env*.local

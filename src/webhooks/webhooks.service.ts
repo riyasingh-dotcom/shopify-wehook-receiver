@@ -157,6 +157,63 @@ export class WebhooksService {
       .slice(0, 50);
   }
 
+  async getProductChanges(): Promise<
+    {
+      id: string;
+      productTitle: string;
+      fieldChanged: string;
+      oldValue: string;
+      newValue: string;
+      changedAt: Date;
+    }[]
+  > {
+    const rows = await this.prisma.productChangeLog.findMany({
+      orderBy: { changedAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        productTitle: true,
+        field: true,
+        oldValue: true,
+        newValue: true,
+        changedAt: true,
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      productTitle: r.productTitle,
+      fieldChanged: r.field,
+      oldValue: r.oldValue ?? '',
+      newValue: r.newValue,
+      changedAt: r.changedAt,
+    }));
+  }
+
+  async getFailedJobCount(): Promise<number> {
+    return this.prisma.failedJob.count();
+  }
+
+  async getFailedJobs(): Promise<
+    {
+      id: string;
+      jobId: string;
+      queueName: string;
+      jobData: unknown;
+      errorMessage: string;
+      attemptsMade: number;
+      failedAt: Date;
+    }[]
+  > {
+    return this.prisma.failedJob.findMany({
+      orderBy: { failedAt: 'desc' },
+    });
+  }
+
+  async clearFailedJobs(): Promise<{ deleted: number }> {
+    const { count } = await this.prisma.failedJob.deleteMany();
+    return { deleted: count };
+  }
+
   async handleProductUpdated(
     raw: unknown,
     shopDomain: string,

@@ -1,8 +1,11 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   Logger,
+  NotFoundException,
+  Param,
   Post,
   Query,
   Req,
@@ -27,6 +30,53 @@ export class WebhooksController {
   @Get('events')
   async getEvents(@Query('topic') topic = 'all'): Promise<WebhookEventDto[]> {
     return this.webhooksService.getEvents(topic);
+  }
+
+  @Get('failed-count')
+  async getFailedCount(): Promise<{ count: number }> {
+    const count = await this.webhooksService.getFailedJobCount();
+    return { count };
+  }
+
+  @Get('failed-jobs')
+  async getFailedJobs() {
+    return this.webhooksService.getFailedJobs();
+  }
+
+  @Delete('failed-jobs')
+  async clearFailedJobs(): Promise<{ deleted: number }> {
+    return this.webhooksService.clearFailedJobs();
+  }
+
+  @Post('events/:id/reprocess')
+  @HttpCode(200)
+  async reprocessEvent(@Param('id') id: string): Promise<void> {
+    const events = await this.webhooksService.getEvents('all');
+    const event = events.find((e) => e.id === id);
+    if (!event) throw new NotFoundException(`Event ${id} not found`);
+
+    const p = event.payload;
+    const rawId =
+      typeof p === 'object' && p !== null && !Array.isArray(p) && 'id' in p
+        ? p['id']
+        : undefined;
+    const shopifyId =
+      typeof rawId === 'string' || typeof rawId === 'number'
+        ? String(rawId)
+        : id;
+
+    await this.queue.add(
+      'process',
+      {
+        topic: event.topic,
+        shopDomain: event.shopDomain,
+        shopifyId,
+        payload: event.payload,
+      },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    );
+
+    this.logger.log(`requeued event id=${id} topic=${event.topic}`);
   }
 
   @Post('shopify')
