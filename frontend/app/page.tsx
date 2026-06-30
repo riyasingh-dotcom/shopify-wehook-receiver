@@ -24,7 +24,7 @@ import {
   Text,
   Toast,
 } from '@shopify/polaris';
-import { useAuthenticatedFetch } from '@/lib/authenticated-fetch';
+import { useAuthenticatedFetch, getIdToken } from '@/lib/authenticated-fetch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -371,23 +371,19 @@ export default function DashboardPage() {
     setUpgrading(true);
     try {
       const shop = new URLSearchParams(window.location.search).get('shop') ?? '';
+      const sessionToken = await getIdToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
       const res = await fetch('/api/billing/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ plan, shop }),
       });
-      if (res.status === 401) {
-        // Access token cookie missing — re-run OAuth at top level to refresh it.
-        // Must be absolute: relative URLs resolve against the Shopify Admin domain, not our frontend.
-        window.top!.location.href = `${window.location.origin}/api/auth?shop=${encodeURIComponent(shop)}`;
-        return;
-      }
       if (!res.ok) {
         const { error } = (await res.json()) as { error: string };
         throw new Error(error);
       }
       const { confirmationUrl } = (await res.json()) as { confirmationUrl: string };
-      // Must be a top-level redirect — Shopify's billing page cannot load inside the iframe
       window.top!.location.href = confirmationUrl;
     } catch (err) {
       setToast({ message: err instanceof Error ? err.message : 'Upgrade failed', error: true });
@@ -415,18 +411,6 @@ export default function DashboardPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('embedded') !== '1') return;
-
-    const shop = params.get('shop') ?? '';
-
-    // Check for OAuth access token on load — redirect to OAuth if missing so
-    // billing (and any future token-gated flows) work without a manual trigger.
-    fetch('/api/auth/status')
-      .then((res) => {
-        if (res.status === 401 && shop) {
-          window.top!.location.href = `${window.location.origin}/api/auth?shop=${encodeURIComponent(shop)}`;
-        }
-      })
-      .catch(() => undefined);
 
     void loadEvents(false);
 

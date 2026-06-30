@@ -1,17 +1,51 @@
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 const VALID_PLAN = new Set(['basic', 'pro'])
 const SHOP_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/
 
+type TokenExchangeResponse = {
+  access_token: string
+  expires_in: number
+  token_type: string
+}
+
 type SubscribeResponse = { confirmationUrl: string }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const cookieStore = await cookies()
-  const accessToken = cookieStore.get('shopify_access_token')?.value
+async function exchangeSessionToken(shop: string, sessionToken: string): Promise<string> {
+  const clientId = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY
+  const clientSecret = process.env.SHOPIFY_API_SECRET
 
-  if (!accessToken) {
-    return NextResponse.json({ error: 'Not authenticated — complete OAuth first' }, { status: 401 })
+  if (!clientId || !clientSecret) {
+    throw new Error('Shopify API credentials not configured')
+  }
+
+  const res = await fetch(`https://${shop}/admin/oauth/access_tokens/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      subject_token: sessionToken,
+      subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Token exchange failed (${res.status}): ${text}`)
+  }
+
+  const { access_token } = (await res.json()) as TokenExchangeResponse
+  return access_token
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const authHeader = request.headers.get('authorization')
+  const sessionToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+
+  if (!sessionToken) {
+    return NextResponse.json({ error: 'Not authenticated — no session token provided' }, { status: 401 })
   }
 
   let body: unknown
@@ -30,6 +64,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   if (typeof shop !== 'string' || !SHOP_REGEX.test(shop)) {
     return NextResponse.json({ error: 'Invalid shop domain' }, { status: 400 })
+  }
+
+  let accessToken: string
+  try {
+    accessToken = await exchangeSessionToken(shop, sessionToken)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Token exchange error:', msg)
+    return NextResponse.json({ error: 'Authentication failed — could not exchange session token' }, { status: 401 })
   }
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''

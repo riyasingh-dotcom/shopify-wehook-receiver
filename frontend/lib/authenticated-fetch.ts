@@ -7,7 +7,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 // App Bridge v4 injects window.shopify asynchronously after the iframe loads.
 // Poll up to 2 s before giving up — fast enough to not delay dev, long enough
 // for Admin to inject the global on a cold iframe load.
-async function getIdToken(): Promise<string | undefined> {
+export async function getIdToken(): Promise<string | undefined> {
   // 1. Already available — fastest path (SPA navigation inside Admin)
   if (window.shopify) {
     await window.shopify.ready
