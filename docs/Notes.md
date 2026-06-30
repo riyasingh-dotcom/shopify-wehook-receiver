@@ -177,3 +177,18 @@ EXPIRED	The pending charge was never confirmed before it timed out. Treat like D
 FROZEN	The merchant's Shopify account is frozen (usually non-payment to Shopify). Your app loses access temporarily. Resume when it becomes ACTIVE again.
 CANCELLED	Subscription was cancelled — either the app was uninstalled, you called appSubscriptionCancel, or Shopify cancelled it.
 The most important gate in your app logic: only serve paid features when status is ACTIVE. FROZEN is a temporary interruption, not a permanent loss — don't treat it as uninstall.
+
+
+## Explain the difference between a unit test and an integration testusing a NestJS webhook endpoint as the example.
+
+## Specifically:
+## - In a unit test of handleOrderCreated, what am I actually testing?
+## - In an integration test of POST /webhooks/shopify, what am I testing that the unit test cannot?
+## - What does Supertest do that Jest alone cannot?
+
+A **unit test** focuses on a single piece of code in isolation. For a NestJS `handleOrderCreated()` method, you're testing only that method's business logic: given a valid Shopify order payload, does it validate the data, enqueue the BullMQ job, return the expected result, or throw an error for invalid input? All external dependencies (such as the queue or database) are usually mocked, so you're not testing HTTP requests or NestJS itself.
+
+An **integration test** exercises multiple parts of the application working together. When testing `POST /webhooks/shopify`, you send a real HTTP request to your NestJS application and verify that the request is routed correctly, the controller receives it, the service is called, middleware and validation run, and the endpoint returns the expected HTTP response. This catches problems such as incorrect routes, missing decorators, broken request handling, or wiring issues that a unit test would never detect.
+
+**Jest** is the testing framework—it runs tests, provides assertions (`expect`), and supports mocking and spying. **Supertest** is an HTTP client designed for testing web applications; it sends real HTTP requests (GET, POST, headers, JSON bodies, etc.) to your NestJS server and lets you verify the responses. In short, Jest tells you whether a test passed or failed, while Supertest lets you test your API endpoints as if they were being called by Shopify.
+
