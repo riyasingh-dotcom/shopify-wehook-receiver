@@ -376,6 +376,11 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, shop }),
       });
+      if (res.status === 401) {
+        // Access token cookie missing — re-run OAuth at top level to refresh it
+        window.top!.location.href = `/api/auth?shop=${encodeURIComponent(shop)}`;
+        return;
+      }
       if (!res.ok) {
         const { error } = (await res.json()) as { error: string };
         throw new Error(error);
