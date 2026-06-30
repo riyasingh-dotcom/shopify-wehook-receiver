@@ -305,6 +305,7 @@ export default function DashboardPage() {
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [clearDlqModalOpen, setClearDlqModalOpen] = useState(false);
   const [clearingDlq, setClearingDlq] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
   const seenIdsRef = useRef(new Set<string>());
 
@@ -366,6 +367,28 @@ export default function DashboardPage() {
     [authenticatedFetch, loadEvents],
   );
 
+  const handleUpgrade = useCallback(async (plan: 'basic' | 'pro') => {
+    setUpgrading(true);
+    try {
+      const shop = new URLSearchParams(window.location.search).get('shop') ?? '';
+      const res = await fetch('/api/billing/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan, shop }),
+      });
+      if (!res.ok) {
+        const { error } = (await res.json()) as { error: string };
+        throw new Error(error);
+      }
+      const { confirmationUrl } = (await res.json()) as { confirmationUrl: string };
+      // Must be a top-level redirect — Shopify's billing page cannot load inside the iframe
+      window.top!.location.href = confirmationUrl;
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Upgrade failed', error: true });
+      setUpgrading(false);
+    }
+  }, []);
+
   const clearDlq = useCallback(async () => {
     setClearingDlq(true);
     try {
@@ -419,6 +442,11 @@ export default function DashboardPage() {
       fullWidth
       title="Activity Feed"
       subtitle="Orders and product changes from your store"
+      primaryAction={{
+        content: 'Upgrade to Basic ($9/mo)',
+        loading: upgrading,
+        onAction: () => void handleUpgrade('basic'),
+      }}
       secondaryActions={[
         {
           content: 'Refresh',

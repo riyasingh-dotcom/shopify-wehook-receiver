@@ -51,3 +51,16 @@ model FailedJob {
   attemptsMade Int
   failedAt     DateTime @default(now())
 }
+
+model Subscription {
+  id                    String    @id @default(cuid())
+  shopDomain            String    @unique
+  shopifyChargeId       String?   @unique
+  plan                  String    @default("free")  // "free" | "basic" | "pro"
+  status                String    @default("pending") // "pending" | "active" | "declined" | "expired" | "frozen" | "cancelled"
+  accessToken           String?
+  trialEndsAt           DateTime?
+  billingStartsAt       DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
