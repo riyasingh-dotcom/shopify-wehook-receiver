@@ -19,16 +19,18 @@ async function exchangeSessionToken(shop: string, sessionToken: string): Promise
     throw new Error('Shopify API credentials not configured')
   }
 
+  const body = new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+    client_id: clientId,
+    client_secret: clientSecret,
+    subject_token: sessionToken,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+  })
+
   const res = await fetch(`https://${shop}/admin/oauth/access_tokens/exchange`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      subject_token: sessionToken,
-      subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-    }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
   })
 
   if (!res.ok) {
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('Token exchange error:', msg)
-    return NextResponse.json({ error: 'Authentication failed — could not exchange session token' }, { status: 401 })
+    return NextResponse.json({ error: msg }, { status: 401 })
   }
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
