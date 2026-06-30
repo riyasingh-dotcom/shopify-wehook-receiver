@@ -12,7 +12,9 @@ const mockRequest = jest.fn();
 
 jest.mock('@shopify/shopify-api', () => {
   const Session = jest.fn().mockImplementation((params: unknown) => params);
-  const Graphql = jest.fn().mockImplementation(() => ({ request: mockRequest }));
+  const Graphql = jest
+    .fn()
+    .mockImplementation(() => ({ request: mockRequest }));
 
   return {
     shopifyApi: jest.fn().mockReturnValue({ clients: { Graphql } }),
@@ -26,7 +28,11 @@ const mockUpdate = jest.fn();
 const mockFindUnique = jest.fn();
 
 const mockPrismaService = {
-  subscription: { upsert: mockUpsert, update: mockUpdate, findUnique: mockFindUnique },
+  subscription: {
+    upsert: mockUpsert,
+    update: mockUpdate,
+    findUnique: mockFindUnique,
+  },
 } as unknown as PrismaService;
 
 const mockConfigService = {
@@ -102,13 +108,19 @@ describe('BillingService', () => {
       mockRequest.mockResolvedValueOnce(makeShopifyResponse());
       mockUpsert.mockResolvedValueOnce({});
 
-      const result = await service.createSubscription(shopDomain, 'basic', accessToken);
+      const result = await service.createSubscription(
+        shopDomain,
+        'basic',
+        accessToken,
+      );
 
       expect(result).toEqual({ confirmationUrl });
 
       expect(mockRequest).toHaveBeenCalledWith(
         expect.stringContaining('appSubscriptionCreate'),
+
         expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           variables: expect.objectContaining({
             name: 'Basic Plan',
             test: true,
@@ -152,12 +164,16 @@ describe('BillingService', () => {
 
       expect(mockRequest).toHaveBeenCalledWith(
         expect.any(String),
+
         expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           variables: expect.objectContaining({
             name: 'Pro Plan',
             lineItems: [
               expect.objectContaining({
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 plan: expect.objectContaining({
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                   appRecurringPricingDetails: expect.objectContaining({
                     price: { amount: '29.00', currencyCode: 'USD' },
                   }),
@@ -250,6 +266,7 @@ describe('BillingService', () => {
       );
       expect(mockUpdate).toHaveBeenCalledWith({
         where: { shopDomain },
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: { status: 'active', billingStartsAt: expect.any(Date) },
       });
     });

@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
-import { BillingService, type Plan } from './billing.service';
+import { BillingService } from './billing.service';
 
 const CallbackQuerySchema = z.object({
   charge_id: z.string().min(1),
@@ -29,9 +29,7 @@ export class BillingController {
   ) {}
 
   @Post('subscribe')
-  async subscribe(
-    @Body() body: unknown,
-  ): Promise<{ confirmationUrl: string }> {
+  async subscribe(@Body() body: unknown): Promise<{ confirmationUrl: string }> {
     const schema = z.object({
       shopDomain: z.string().min(1),
       plan: z.enum(['basic', 'pro']),
@@ -46,7 +44,7 @@ export class BillingController {
     const { shopDomain, plan, accessToken } = parsed.data;
     return this.billingService.createSubscription(
       shopDomain,
-      plan as Plan,
+      plan,
       accessToken,
     );
   }
