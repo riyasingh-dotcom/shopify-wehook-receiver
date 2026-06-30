@@ -13,7 +13,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Generate a random nonce to prevent CSRF attacks
   const state = crypto.randomBytes(16).toString('hex')
 
-  const redirectUri = `${request.nextUrl.origin}/api/auth/callback`
+  // Use forwarded headers so the URI is the public domain, not Railway's internal hostname
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? request.nextUrl.host
+  const proto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() ?? 'https'
+  const redirectUri = `${proto}://${host}/api/auth/callback`
 
   const authUrl = new URL(`https://${shop}/admin/oauth/authorize`)
   authUrl.searchParams.set('client_id', process.env.NEXT_PUBLIC_SHOPIFY_API_KEY!)
