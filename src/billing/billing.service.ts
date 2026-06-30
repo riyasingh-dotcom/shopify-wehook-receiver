@@ -1,18 +1,13 @@
 import {
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
-  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  ApiVersion,
-  Session,
-  shopifyApi,
-  type Shopify,
-} from '@shopify/shopify-api';
-import '@shopify/shopify-api/adapters/node';
+import { Session, type Shopify } from '@shopify/shopify-api';
 import { PrismaService } from '../prisma/prisma.service';
+import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
 
 export type Plan = 'basic' | 'pro';
 
@@ -79,25 +74,14 @@ type GetAppSubscriptionData = {
 };
 
 @Injectable()
-export class BillingService implements OnModuleInit {
+export class BillingService {
   private readonly logger = new Logger(BillingService.name);
-  private shopify!: Shopify;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    @Inject(SHOPIFY_INSTANCE) private readonly shopify: Shopify,
   ) {}
-
-  onModuleInit(): void {
-    this.shopify = shopifyApi({
-      apiKey: this.config.getOrThrow<string>('SHOPIFY_API_KEY'),
-      apiSecretKey: this.config.getOrThrow<string>('SHOPIFY_API_SECRET'),
-      scopes: ['read_orders', 'read_products'],
-      hostName: this.config.get<string>('APP_HOST') ?? 'localhost',
-      apiVersion: ApiVersion.January25,
-      isEmbeddedApp: true,
-    });
-  }
 
   async createSubscription(
     shopDomain: string,

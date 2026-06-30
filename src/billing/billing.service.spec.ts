@@ -2,6 +2,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
 import { BillingService } from './billing.service';
 
 // ---------------------------------------------------------------------------
@@ -10,18 +11,10 @@ import { BillingService } from './billing.service';
 
 const mockRequest = jest.fn();
 
-jest.mock('@shopify/shopify-api', () => {
-  const Session = jest.fn().mockImplementation((params: unknown) => params);
-  const Graphql = jest
-    .fn()
-    .mockImplementation(() => ({ request: mockRequest }));
-
-  return {
-    shopifyApi: jest.fn().mockReturnValue({ clients: { Graphql } }),
-    ApiVersion: { January25: '2025-01' },
-    Session,
-  };
-});
+// Mock Session constructor — the real one requires a live Shopify context
+jest.mock('@shopify/shopify-api', () => ({
+  Session: jest.fn().mockImplementation((params: unknown) => params),
+}));
 
 const mockUpsert = jest.fn();
 const mockUpdate = jest.fn();
@@ -67,11 +60,20 @@ describe('BillingService', () => {
         BillingService,
         { provide: ConfigService, useValue: mockConfigService },
         { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: SHOPIFY_INSTANCE,
+          useValue: {
+            clients: {
+              Graphql: jest
+                .fn()
+                .mockImplementation(() => ({ request: mockRequest })),
+            },
+          },
+        },
       ],
     }).compile();
 
     service = module.get<BillingService>(BillingService);
-    service.onModuleInit();
   });
 
   it('should be defined', () => {

@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
 import { BillingModule } from './billing/billing.module';
+import { ShopifyModule } from './shopify/shopify.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BillingModule } from './billing/billing.module';
       inject: [ConfigService],
     }),
     PrismaModule,
+    ShopifyModule,
     WebhooksModule,
     BillingModule,
   ],
