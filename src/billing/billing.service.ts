@@ -91,6 +91,10 @@ export class BillingService {
     const returnUrl = this.config.getOrThrow<string>('BILLING_RETURN_URL');
     const { name, amount } = PLAN_CONFIG[plan];
 
+    this.logger.log(
+      `createSubscription shop=${shopDomain} plan=${plan} tokenPrefix=${accessToken.slice(0, 10)}... tokenLength=${accessToken.length}`,
+    );
+
     const session = new Session({
       id: `offline_${shopDomain}`,
       shop: shopDomain,
