@@ -416,6 +416,18 @@ export default function DashboardPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('embedded') !== '1') return;
 
+    const shop = params.get('shop') ?? '';
+
+    // Check for OAuth access token on load — redirect to OAuth if missing so
+    // billing (and any future token-gated flows) work without a manual trigger.
+    fetch('/api/auth/status')
+      .then((res) => {
+        if (res.status === 401 && shop) {
+          window.top!.location.href = `${window.location.origin}/api/auth?shop=${encodeURIComponent(shop)}`;
+        }
+      })
+      .catch(() => undefined);
+
     void loadEvents(false);
 
     const timer = setInterval(() => void loadEvents(true), POLL_INTERVAL_MS);
