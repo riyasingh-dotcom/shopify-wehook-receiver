@@ -1,11 +1,8 @@
 import { Module } from '@nestjs/common';
 import { WebhooksModule } from './webhooks/webhooks.module';
-import { DashboardModule } from './dashboard/dashboard.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
-import { BullBoardModule } from '@bull-board/nestjs';
-import { ExpressAdapter } from '@bull-board/express';
 
 @Module({
   imports: [
@@ -41,20 +38,16 @@ import { ExpressAdapter } from '@bull-board/express';
           },
           defaultWorkerOptions: {
             stalledInterval: 600_000, // stalled check: every 10 min (144×/day)
-            blockTimeout: 60_000,     // blocking wait: 60s (1440 BLMOVE cmds/day)
-            skipVersionCheck: true,   // skip compat check commands on startup
+            blockTimeout: 60_000, // blocking wait: 60s (1440 BLMOVE cmds/day)
+            skipVersionCheck: true, // skip compat check commands on startup
+            metrics: { maxDataPoints: 0 }, // disable metrics — each job would write to Redis
           },
         };
       },
       inject: [ConfigService],
     }),
-    BullBoardModule.forRoot({
-      route: '/admin/queues',
-      adapter: ExpressAdapter,
-    }),
     PrismaModule,
     WebhooksModule,
-    DashboardModule,
   ],
   controllers: [],
   providers: [],
