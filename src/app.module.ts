@@ -3,6 +3,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { BullModule } from '@nestjs/bullmq';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BullModule } from '@nestjs/bullmq';
     }),
     PrismaModule,
     WebhooksModule,
+    BillingModule,
   ],
   controllers: [],
   providers: [],
