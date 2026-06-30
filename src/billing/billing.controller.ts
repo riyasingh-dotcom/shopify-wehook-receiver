@@ -49,7 +49,7 @@ export class BillingController {
     const schema = z.object({
       shopDomain: z.string().min(1),
       plan: z.enum(['basic', 'pro']),
-      accessToken: z.string().min(1),
+      sessionToken: z.string().min(1),
     });
 
     const parsed = schema.safeParse(body);
@@ -57,11 +57,11 @@ export class BillingController {
       throw new BadRequestException(parsed.error.message);
     }
 
-    const { shopDomain, plan, accessToken } = parsed.data;
+    const { shopDomain, plan, sessionToken } = parsed.data;
     return this.billingService.createSubscription(
       shopDomain,
       plan,
-      accessToken,
+      sessionToken,
     );
   }
 

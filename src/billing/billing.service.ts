@@ -5,7 +5,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Session, type Shopify } from '@shopify/shopify-api';
+import {
+  RequestedTokenType,
+  Session,
+  type Shopify,
+} from '@shopify/shopify-api';
 import { PrismaService } from '../prisma/prisma.service';
 import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
 
@@ -86,21 +90,19 @@ export class BillingService {
   async createSubscription(
     shopDomain: string,
     plan: Plan,
-    accessToken: string,
+    sessionToken: string,
   ): Promise<CreateSubscriptionResult> {
     const returnUrl = this.config.getOrThrow<string>('BILLING_RETURN_URL');
     const { name, amount } = PLAN_CONFIG[plan];
 
     this.logger.log(
-      `createSubscription shop=${shopDomain} plan=${plan} tokenPrefix=${accessToken.slice(0, 10)}... tokenLength=${accessToken.length}`,
+      `createSubscription shop=${shopDomain} plan=${plan} — exchanging session token`,
     );
 
-    const session = new Session({
-      id: `offline_${shopDomain}`,
+    const { session } = await this.shopify.auth.tokenExchange({
       shop: shopDomain,
-      state: '',
-      isOnline: false,
-      accessToken,
+      sessionToken,
+      requestedTokenType: RequestedTokenType.OnlineAccessToken,
     });
 
     const client = new this.shopify.clients.Graphql({ session });
@@ -158,13 +160,13 @@ export class BillingService {
         shopifyChargeId: chargeId,
         plan,
         status: 'pending',
-        accessToken,
+        accessToken: session.accessToken ?? '',
       },
       update: {
         shopifyChargeId: chargeId,
         plan,
         status: 'pending',
-        accessToken,
+        accessToken: session.accessToken ?? '',
       },
     });
 

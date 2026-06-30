@@ -10,10 +10,18 @@ import { BillingService } from './billing.service';
 // ---------------------------------------------------------------------------
 
 const mockRequest = jest.fn();
+const mockTokenExchange = jest.fn();
 
-// Mock Session constructor — the real one requires a live Shopify context
+// Mock Session constructor — the real one requires a live Shopify context.
+// Also expose RequestedTokenType so the service can reference the enum values.
 jest.mock('@shopify/shopify-api', () => ({
   Session: jest.fn().mockImplementation((params: unknown) => params),
+  RequestedTokenType: {
+    OnlineAccessToken:
+      'urn:shopify:params:oauth:token-type:online-access-token',
+    OfflineAccessToken:
+      'urn:shopify:params:oauth:token-type:offline-access-token',
+  },
 }));
 
 const mockUpsert = jest.fn();
@@ -68,6 +76,9 @@ describe('BillingService', () => {
                 .fn()
                 .mockImplementation(() => ({ request: mockRequest })),
             },
+            auth: {
+              tokenExchange: mockTokenExchange,
+            },
           },
         },
       ],
@@ -82,7 +93,8 @@ describe('BillingService', () => {
 
   describe('createSubscription', () => {
     const shopDomain = 'test-shop.myshopify.com';
-    const accessToken = 'shpat_test_token';
+    const sessionToken = 'eyJhbGciOiJIUzI1NiJ9.test_session_token';
+    const onlineAccessToken = 'online_access_token_from_exchange';
     const confirmationUrl =
       'https://admin.shopify.com/store/test-shop/charges/confirm_recurring_application_charge?charge_id=gid://shopify/AppSubscription/1';
 
@@ -106,6 +118,12 @@ describe('BillingService', () => {
       },
     });
 
+    beforeEach(() => {
+      mockTokenExchange.mockResolvedValue({
+        session: { accessToken: onlineAccessToken },
+      });
+    });
+
     it('returns confirmationUrl and upserts a pending subscription for basic plan', async () => {
       mockRequest.mockResolvedValueOnce(makeShopifyResponse());
       mockUpsert.mockResolvedValueOnce({});
@@ -113,14 +131,20 @@ describe('BillingService', () => {
       const result = await service.createSubscription(
         shopDomain,
         'basic',
-        accessToken,
+        sessionToken,
       );
 
       expect(result).toEqual({ confirmationUrl });
 
+      expect(mockTokenExchange).toHaveBeenCalledWith({
+        shop: shopDomain,
+        sessionToken,
+        requestedTokenType:
+          'urn:shopify:params:oauth:token-type:online-access-token',
+      });
+
       expect(mockRequest).toHaveBeenCalledWith(
         expect.stringContaining('appSubscriptionCreate'),
-
         expect.objectContaining({
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           variables: expect.objectContaining({
@@ -147,13 +171,13 @@ describe('BillingService', () => {
           shopifyChargeId: 'gid://shopify/AppSubscription/1',
           plan: 'basic',
           status: 'pending',
-          accessToken,
+          accessToken: onlineAccessToken,
         },
         update: {
           shopifyChargeId: 'gid://shopify/AppSubscription/1',
           plan: 'basic',
           status: 'pending',
-          accessToken,
+          accessToken: onlineAccessToken,
         },
       });
     });
@@ -162,11 +186,10 @@ describe('BillingService', () => {
       mockRequest.mockResolvedValueOnce(makeShopifyResponse());
       mockUpsert.mockResolvedValueOnce({});
 
-      await service.createSubscription(shopDomain, 'pro', accessToken);
+      await service.createSubscription(shopDomain, 'pro', sessionToken);
 
       expect(mockRequest).toHaveBeenCalledWith(
         expect.any(String),
-
         expect.objectContaining({
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           variables: expect.objectContaining({
@@ -197,7 +220,7 @@ describe('BillingService', () => {
       );
 
       await expect(
-        service.createSubscription(shopDomain, 'basic', accessToken),
+        service.createSubscription(shopDomain, 'basic', sessionToken),
       ).rejects.toThrow(InternalServerErrorException);
 
       expect(mockUpsert).not.toHaveBeenCalled();
@@ -209,7 +232,7 @@ describe('BillingService', () => {
       );
 
       await expect(
-        service.createSubscription(shopDomain, 'basic', accessToken),
+        service.createSubscription(shopDomain, 'basic', sessionToken),
       ).rejects.toThrow(InternalServerErrorException);
 
       expect(mockUpsert).not.toHaveBeenCalled();
@@ -219,7 +242,7 @@ describe('BillingService', () => {
       mockRequest.mockResolvedValueOnce({ data: null });
 
       await expect(
-        service.createSubscription(shopDomain, 'basic', accessToken),
+        service.createSubscription(shopDomain, 'basic', sessionToken),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
@@ -228,7 +251,7 @@ describe('BillingService', () => {
       mockUpsert.mockRejectedValueOnce(new Error('DB error'));
 
       await expect(
-        service.createSubscription(shopDomain, 'basic', accessToken),
+        service.createSubscription(shopDomain, 'basic', sessionToken),
       ).rejects.toThrow('DB error');
     });
   });
