@@ -65,16 +65,12 @@ export class WebhooksController {
         ? String(rawId)
         : id;
 
-    await this.queue.add(
-      'process',
-      {
-        topic: event.topic,
-        shopDomain: event.shopDomain,
-        shopifyId,
-        payload: event.payload,
-      },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+    await this.queue.add('process', {
+      topic: event.topic,
+      shopDomain: event.shopDomain,
+      shopifyId,
+      payload: event.payload,
+    });
 
     this.logger.log(`requeued event id=${id} topic=${event.topic}`);
   }
@@ -110,16 +106,12 @@ export class WebhooksController {
     const normalizedDomain =
       typeof shopDomain === 'string' ? shopDomain : 'unknown';
 
-    await this.queue.add(
-      'process',
-      {
-        topic: normalizedTopic,
-        shopDomain: normalizedDomain,
-        shopifyId,
-        payload,
-      },
-      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
-    );
+    await this.queue.add('process', {
+      topic: normalizedTopic,
+      shopDomain: normalizedDomain,
+      shopifyId,
+      payload,
+    });
 
     this.logger.log(
       `queued job topic=${normalizedTopic} shopifyId=${shopifyId}`,

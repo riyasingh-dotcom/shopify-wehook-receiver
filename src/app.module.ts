@@ -38,7 +38,7 @@ import { BullModule } from '@nestjs/bullmq';
           },
           defaultWorkerOptions: {
             stalledInterval: 600_000, // stalled check: every 10 min (144×/day)
-            blockTimeout: 60_000, // blocking wait: 60s (1440 BLMOVE cmds/day)
+            blockTimeout: 300_000, // blocking wait: 5 min (288 BLMOVE cmds/day)
             skipVersionCheck: true, // skip compat check commands on startup
             metrics: { maxDataPoints: 0 }, // disable metrics — each job would write to Redis
           },
