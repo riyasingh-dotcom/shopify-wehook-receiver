@@ -1,19 +1,13 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
-  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import {
-  shopifyApi,
-  ApiVersion,
-  type Shopify,
-  type JwtPayload,
-} from '@shopify/shopify-api';
-import '@shopify/shopify-api/adapters/node';
+import { type Shopify, type JwtPayload } from '@shopify/shopify-api';
 import type { Request } from 'express';
+import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
 
 export type ShopifySessionPayload = JwtPayload & {
   iss: string; // https://<shop>.myshopify.com/admin
@@ -33,21 +27,8 @@ export type ShopifySessionPayload = JwtPayload & {
  * Returns 401 if the token is missing, malformed, expired, or has an invalid signature.
  */
 @Injectable()
-export class ShopifySessionTokenGuard implements CanActivate, OnModuleInit {
-  private shopify!: Shopify;
-
-  constructor(private readonly config: ConfigService) {}
-
-  onModuleInit(): void {
-    this.shopify = shopifyApi({
-      apiKey: this.config.getOrThrow<string>('SHOPIFY_API_KEY'),
-      apiSecretKey: this.config.getOrThrow<string>('SHOPIFY_API_SECRET'),
-      scopes: ['read_orders', 'read_products'],
-      hostName: this.config.get<string>('APP_HOST') ?? 'localhost',
-      apiVersion: ApiVersion.January25,
-      isEmbeddedApp: true,
-    });
-  }
+export class ShopifySessionTokenGuard implements CanActivate {
+  constructor(@Inject(SHOPIFY_INSTANCE) private readonly shopify: Shopify) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
