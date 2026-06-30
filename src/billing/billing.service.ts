@@ -238,4 +238,30 @@ export class BillingService {
         ? 'DECLINED'
         : 'OTHER';
   }
+
+  async testToken(
+    shopDomain: string,
+    accessToken: string,
+  ): Promise<{ ok: boolean; shop?: string; error?: string }> {
+    const session = new Session({
+      id: `offline_${shopDomain}`,
+      shop: shopDomain,
+      state: '',
+      isOnline: false,
+      accessToken,
+    });
+
+    const client = new this.shopify.clients.Graphql({ session });
+
+    try {
+      const response = await client.request<{ shop: { name: string } }>(
+        `#graphql query { shop { name } }`,
+      );
+      return { ok: true, shop: response.data?.shop?.name };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`testToken shop=${shopDomain} error=${msg}`);
+      return { ok: false, error: msg };
+    }
+  }
 }

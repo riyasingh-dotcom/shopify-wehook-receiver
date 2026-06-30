@@ -28,6 +28,22 @@ export class BillingController {
     private readonly config: ConfigService,
   ) {}
 
+  @Post('test-token')
+  async testToken(
+    @Body() body: unknown,
+  ): Promise<{ ok: boolean; shop?: string; error?: string }> {
+    const schema = z.object({
+      shopDomain: z.string().min(1),
+      accessToken: z.string().min(1),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.message);
+    return await this.billingService.testToken(
+      parsed.data.shopDomain,
+      parsed.data.accessToken,
+    );
+  }
+
   @Post('subscribe')
   async subscribe(@Body() body: unknown): Promise<{ confirmationUrl: string }> {
     const schema = z.object({
