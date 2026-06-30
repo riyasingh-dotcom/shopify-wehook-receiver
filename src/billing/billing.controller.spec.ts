@@ -108,7 +108,9 @@ describe('BillingController', () => {
 
       const result = await controller.callback(chargeId, undefined);
 
-      expect(result).toEqual({ url: `https://${shop}/admin/apps/test-api-key` });
+      expect(result).toEqual({
+        url: `https://${shop}/admin/apps/test-api-key`,
+      });
       expect(mockResolveShopByChargeId).toHaveBeenCalledWith(chargeId);
       expect(mockHandleCallback).toHaveBeenCalledWith(chargeId, shop);
     });

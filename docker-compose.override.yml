@@ -1,0 +1,9 @@
+services:
+  testdb:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: webhooks_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"

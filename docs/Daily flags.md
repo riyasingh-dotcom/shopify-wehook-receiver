@@ -103,3 +103,38 @@
 **One thing I'm not sure I understand:**
 
 * The complete lifecycle of Shopify session tokens, specifically how App Bridge obtains, refreshes, and validates them across the frontend and NestJS backend.
+
+
+## week 7
+Day 1 Progress Report
+
+Built:
+
+Implemented the complete Shopify Billing API flow:
+"Upgrade to Basic ($9/mo)" button
+App Bridge session token exchange
+appSubscriptionCreate mutation
+Redirect to Shopify billing approval page
+Billing callback handler that verifies the subscription and redirects back into the embedded app
+Built a Supertest integration test suite for POST /webhooks/shopify covering:
+Valid HMAC requests
+Invalid HMAC requests
+Missing required fields
+Configured a dedicated local test database (Docker on port 5433) with migrations for integration testing.
+
+Testing:
+
+Shopify Billing flow successfully tested in a development store for the Approved subscription path. (Declined flow is implemented but still needs one manual verification.)
+All tests passing:
+Billing/overall integration tests: 49 / 49 ✅
+Webhook integration tests: 7 / 7 ✅
+
+Hardest Challenges:
+
+Resolved Shopify's new offline token changes after multiple unsuccessful approaches. Direct token exchange requests (raw fetch, JSON body, and form-encoded body) were blocked by Cloudflare. The working solution was forwarding the App Bridge session token to the NestJS backend and performing the exchange using shopify.auth.tokenExchange() from the Shopify SDK.
+Enabled NestJS integration tests to run without a live Redis instance by overriding the WebhookProcessor provider, preventing BullMQ workers from being instantiated during test startup.
+
+Key Learnings / Open Questions:
+
+I'm still not fully clear on why Shopify sometimes omits the shop query parameter from the billing callback returnUrl; a database fallback using chargeId was implemented to handle this case.
+I also want to better understand why express.raw({ type: 'application/json' }) must execute before express.json() for Shopify HMAC verification, what happens to the request buffer if express.json() runs first, and whether the original raw body can be recovered afterward.
