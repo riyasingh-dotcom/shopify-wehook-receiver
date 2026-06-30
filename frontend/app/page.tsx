@@ -377,8 +377,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ plan, shop }),
       });
       if (res.status === 401) {
-        // Access token cookie missing — re-run OAuth at top level to refresh it
-        window.top!.location.href = `/api/auth?shop=${encodeURIComponent(shop)}`;
+        // Access token cookie missing — re-run OAuth at top level to refresh it.
+        // Must be absolute: relative URLs resolve against the Shopify Admin domain, not our frontend.
+        window.top!.location.href = `${window.location.origin}/api/auth?shop=${encodeURIComponent(shop)}`;
         return;
       }
       if (!res.ok) {
