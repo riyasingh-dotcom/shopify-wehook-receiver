@@ -14,9 +14,12 @@ import { BillingService } from './billing.service';
 
 const CallbackQuerySchema = z.object({
   charge_id: z.string().min(1),
+  // Shopify includes shop on most redirects but it is not guaranteed — fall
+  // back to a DB lookup by chargeId when it is absent.
   shop: z
     .string()
-    .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/, 'Invalid shop domain'),
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/)
+    .optional(),
 });
 
 @Controller('billing')
@@ -71,16 +74,35 @@ export class BillingController {
     @Query('charge_id') chargeId: unknown,
     @Query('shop') shop: unknown,
   ): Promise<{ url: string }> {
+    this.logger.log(
+      `billing/callback received charge_id=${String(chargeId)} shop=${String(shop)}`,
+    );
+
     const parsed = CallbackQuerySchema.safeParse({ charge_id: chargeId, shop });
 
     if (!parsed.success) {
       this.logger.warn(
-        `billing/callback received invalid query params: ${parsed.error.message}`,
+        `billing/callback invalid params: ${parsed.error.message}`,
       );
       return { url: this.fallbackRedirectUrl() };
     }
 
-    const { charge_id, shop: shopDomain } = parsed.data;
+    const { charge_id } = parsed.data;
+
+    // Shopify does not always include shop in the billing callback —
+    // resolve it from the DB when missing.
+    let shopDomain = parsed.data.shop;
+    if (!shopDomain) {
+      const resolved =
+        await this.billingService.resolveShopByChargeId(charge_id);
+      if (!resolved) {
+        this.logger.warn(
+          `billing/callback: could not resolve shop for chargeId=${charge_id}`,
+        );
+        return { url: this.fallbackRedirectUrl() };
+      }
+      shopDomain = resolved;
+    }
 
     try {
       await this.billingService.handleCallback(charge_id, shopDomain);
@@ -96,7 +118,15 @@ export class BillingController {
   }
 
   private fallbackRedirectUrl(): string {
-    const host = this.config.get<string>('APP_HOST') ?? 'localhost';
-    return `https://${host}`;
+    const billingReturnUrl = this.config.get<string>('BILLING_RETURN_URL');
+    if (billingReturnUrl) {
+      try {
+        return new URL(billingReturnUrl).origin;
+      } catch {
+        // fall through
+      }
+    }
+    const host = this.config.get<string>('APP_HOST');
+    return host ? `https://${host}` : 'about:blank';
   }
 }

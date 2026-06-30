@@ -177,6 +177,17 @@ export class BillingService {
     return { confirmationUrl };
   }
 
+  async resolveShopByChargeId(chargeId: string): Promise<string | null> {
+    const gid = chargeId.startsWith(SHOPIFY_GID_PREFIX)
+      ? chargeId
+      : `${SHOPIFY_GID_PREFIX}${chargeId}`;
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { shopifyChargeId: gid },
+      select: { shopDomain: true },
+    });
+    return subscription?.shopDomain ?? null;
+  }
+
   async handleCallback(
     chargeId: string,
     shopDomain: string,

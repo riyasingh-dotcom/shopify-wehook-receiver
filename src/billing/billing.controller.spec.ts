@@ -4,9 +4,11 @@ import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 
 const mockHandleCallback = jest.fn();
+const mockResolveShopByChargeId = jest.fn();
 
 const mockBillingService = {
   handleCallback: mockHandleCallback,
+  resolveShopByChargeId: mockResolveShopByChargeId,
 } as unknown as BillingService;
 
 const mockConfigService = {
@@ -90,11 +92,25 @@ describe('BillingController', () => {
       expect(mockHandleCallback).not.toHaveBeenCalled();
     });
 
-    it('redirects to fallback URL when shop is missing', async () => {
+    it('redirects to fallback URL when shop is missing and DB lookup finds nothing', async () => {
+      mockResolveShopByChargeId.mockResolvedValueOnce(null);
+
       const result = await controller.callback(chargeId, undefined);
 
       expect(result).toEqual({ url: 'https://app.example.com' });
+      expect(mockResolveShopByChargeId).toHaveBeenCalledWith(chargeId);
       expect(mockHandleCallback).not.toHaveBeenCalled();
+    });
+
+    it('resolves shop from DB and proceeds when Shopify omits shop param', async () => {
+      mockResolveShopByChargeId.mockResolvedValueOnce(shop);
+      mockHandleCallback.mockResolvedValueOnce('ACTIVE');
+
+      const result = await controller.callback(chargeId, undefined);
+
+      expect(result).toEqual({ url: `https://${shop}/admin/apps/test-api-key` });
+      expect(mockResolveShopByChargeId).toHaveBeenCalledWith(chargeId);
+      expect(mockHandleCallback).toHaveBeenCalledWith(chargeId, shop);
     });
   });
 });
