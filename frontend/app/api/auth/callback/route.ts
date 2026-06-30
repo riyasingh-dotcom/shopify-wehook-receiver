@@ -78,7 +78,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { access_token } = (await tokenRes.json()) as TokenResponse
 
   // 5. Redirect back into the Shopify admin with the embedded app params
-  const appUrl = new URL('/', request.nextUrl.origin)
+  const fwdHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? request.nextUrl.host
+  const fwdProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim() ?? 'https'
+  const appUrl = new URL('/', `${fwdProto}://${fwdHost}`)
   appUrl.searchParams.set('shop', shop)
   appUrl.searchParams.set('host', host)
 
