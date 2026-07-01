@@ -367,7 +367,7 @@ describe('BillingService', () => {
       status: 'active',
     };
 
-    it('updates status to cancelled and sets graceEndsAt 3 days out', async () => {
+    it('updates status to cancelled and sets graceEndsAt ~3 days out', async () => {
       mockFindUnique.mockResolvedValueOnce(existingSub);
       mockUpdate.mockResolvedValueOnce({});
 
@@ -375,20 +375,18 @@ describe('BillingService', () => {
       await service.handleSubscriptionUpdate(makePayload('CANCELLED'));
       const after = Date.now();
 
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: existingSub.id },
-          data: expect.objectContaining({
-            status: 'cancelled',
-            graceEndsAt: expect.any(Date),
-          }),
-        }),
-      );
-
-      const call = mockUpdate.mock.calls[0][0] as {
-        data: { graceEndsAt: Date };
-      };
-      const graceMs = call.data.graceEndsAt.getTime();
+      const [[callArg]] = mockUpdate.mock.calls as [
+        [
+          {
+            where: { id: string };
+            data: { status: string; graceEndsAt: Date };
+          },
+        ],
+      ];
+      expect(callArg.where).toEqual({ id: existingSub.id });
+      expect(callArg.data.status).toBe('cancelled');
+      expect(callArg.data.graceEndsAt).toBeInstanceOf(Date);
+      const graceMs = callArg.data.graceEndsAt.getTime();
       expect(graceMs).toBeGreaterThanOrEqual(
         before + 3 * 24 * 60 * 60 * 1000 - 100,
       );
@@ -397,20 +395,17 @@ describe('BillingService', () => {
       );
     });
 
-    it('updates status to expired and sets graceEndsAt 3 days out', async () => {
+    it('updates status to expired and sets graceEndsAt ~3 days out', async () => {
       mockFindUnique.mockResolvedValueOnce(existingSub);
       mockUpdate.mockResolvedValueOnce({});
 
       await service.handleSubscriptionUpdate(makePayload('EXPIRED'));
 
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: 'expired',
-            graceEndsAt: expect.any(Date),
-          }),
-        }),
-      );
+      const [[callArg]] = mockUpdate.mock.calls as [
+        [{ data: { status: string; graceEndsAt: Date } }],
+      ];
+      expect(callArg.data.status).toBe('expired');
+      expect(callArg.data.graceEndsAt).toBeInstanceOf(Date);
     });
 
     it('clears graceEndsAt when status becomes ACTIVE', async () => {
@@ -422,11 +417,11 @@ describe('BillingService', () => {
 
       await service.handleSubscriptionUpdate(makePayload('ACTIVE'));
 
-      expect(mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ status: 'active', graceEndsAt: null }),
-        }),
-      );
+      const [[callArg]] = mockUpdate.mock.calls as [
+        [{ data: { status: string; graceEndsAt: null } }],
+      ];
+      expect(callArg.data.status).toBe('active');
+      expect(callArg.data.graceEndsAt).toBeNull();
     });
 
     it('does not set graceEndsAt for FROZEN status', async () => {
@@ -435,11 +430,11 @@ describe('BillingService', () => {
 
       await service.handleSubscriptionUpdate(makePayload('FROZEN'));
 
-      const call = mockUpdate.mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      };
-      expect(call.data.status).toBe('frozen');
-      expect(call.data).not.toHaveProperty('graceEndsAt');
+      const [[callArg]] = mockUpdate.mock.calls as [
+        [{ data: Record<string, unknown> }],
+      ];
+      expect(callArg.data.status).toBe('frozen');
+      expect(callArg.data).not.toHaveProperty('graceEndsAt');
     });
 
     it('does nothing when no subscription matches the chargeId', async () => {
@@ -452,7 +447,9 @@ describe('BillingService', () => {
 
     it('throws a ZodError when payload is invalid', async () => {
       await expect(
-        service.handleSubscriptionUpdate({ app_subscription: { status: 'CANCELLED' } }),
+        service.handleSubscriptionUpdate({
+          app_subscription: { status: 'CANCELLED' },
+        }),
       ).rejects.toThrow();
     });
   });

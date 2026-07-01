@@ -52,8 +52,8 @@ jobs:
           version: latest
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Test
-        run: pnpm test
+      - name: Run tests with coverage
+        run: pnpm test:cov
 
   build:
     name: Build
