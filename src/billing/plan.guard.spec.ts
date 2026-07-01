@@ -26,6 +26,21 @@ function buildContext(shopifySessionDest: string): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
+function buildContextWithResponse(
+  shopifySessionDest: string,
+  mockSetHeader: jest.Mock,
+): ExecutionContext {
+  const req = { shopifySession: { dest: shopifySessionDest } };
+  return {
+    getHandler: () => ({}),
+    getClass: () => ({}),
+    switchToHttp: () => ({
+      getRequest: () => req,
+      getResponse: () => ({ setHeader: mockSetHeader }),
+    }),
+  } as unknown as ExecutionContext;
+}
+
 describe('PlanGuard', () => {
   let guard: PlanGuard;
 
@@ -178,6 +193,84 @@ describe('PlanGuard', () => {
   describe('PLAN_KEY metadata key', () => {
     it('is the expected constant used by @RequiresPlan', () => {
       expect(PLAN_KEY).toBe('requiredPlan');
+    });
+  });
+
+  describe('grace period', () => {
+    const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const pastDate = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+
+    beforeEach(() => {
+      mockReflector.getAllAndOverride.mockReturnValue('basic');
+    });
+
+    it('allows access and sets warning headers when in grace period', async () => {
+      mockPrismaService.subscription.findUnique.mockResolvedValue({
+        plan: 'basic',
+        status: 'cancelled',
+        graceEndsAt: futureDate,
+      });
+      const mockSetHeader = jest.fn();
+      const ctx = buildContextWithResponse(
+        'https://shop.myshopify.com',
+        mockSetHeader,
+      );
+
+      const result = await guard.canActivate(ctx);
+
+      expect(result).toBe(true);
+      expect(mockSetHeader).toHaveBeenCalledWith(
+        'X-Subscription-Warning',
+        'grace_period',
+      );
+      expect(mockSetHeader).toHaveBeenCalledWith(
+        'X-Grace-Ends-At',
+        futureDate.toISOString(),
+      );
+    });
+
+    it('preserves the original plan during grace period', async () => {
+      mockPrismaService.subscription.findUnique.mockResolvedValue({
+        plan: 'pro',
+        status: 'expired',
+        graceEndsAt: futureDate,
+      });
+      const mockSetHeader = jest.fn();
+      const req = { shopifySession: { dest: 'https://shop.myshopify.com' } };
+      const ctx = {
+        getHandler: () => ({}),
+        getClass: () => ({}),
+        switchToHttp: () => ({
+          getRequest: () => req,
+          getResponse: () => ({ setHeader: mockSetHeader }),
+        }),
+      } as unknown as ExecutionContext;
+
+      await guard.canActivate(ctx);
+
+      expect((req as typeof req & { shopifyPlan: string }).shopifyPlan).toBe(
+        'pro',
+      );
+    });
+
+    it('falls through to normal plan check when grace period has expired', async () => {
+      mockPrismaService.subscription.findUnique.mockResolvedValue({
+        plan: 'basic',
+        status: 'cancelled',
+        graceEndsAt: pastDate,
+      });
+      const ctx = buildContext('https://shop.myshopify.com');
+      await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('falls through to normal plan check when graceEndsAt is null', async () => {
+      mockPrismaService.subscription.findUnique.mockResolvedValue({
+        plan: 'basic',
+        status: 'expired',
+        graceEndsAt: null,
+      });
+      const ctx = buildContext('https://shop.myshopify.com');
+      await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
     });
   });
 });

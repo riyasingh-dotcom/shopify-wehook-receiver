@@ -28,6 +28,7 @@ export type SubscriptionStatus = {
   plan: Plan;
   status: string;
   trialEndsAt: Date | null;
+  graceEndsAt: Date | null;
   features: PlanFeatures;
 };
 
@@ -101,7 +102,7 @@ export class BillingService {
   async getStatus(shopDomain: string): Promise<SubscriptionStatus> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { shopDomain },
-      select: { plan: true, status: true, trialEndsAt: true },
+      select: { plan: true, status: true, trialEndsAt: true, graceEndsAt: true },
     });
 
     if (!subscription) {
@@ -109,6 +110,7 @@ export class BillingService {
         plan: 'free',
         status: 'active',
         trialEndsAt: null,
+        graceEndsAt: null,
         features: PLANS.free.features,
       };
     }
@@ -123,6 +125,7 @@ export class BillingService {
       plan,
       status: subscription.status,
       trialEndsAt: subscription.trialEndsAt,
+      graceEndsAt: subscription.graceEndsAt,
       features: PLANS[plan].features,
     };
   }

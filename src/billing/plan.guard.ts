@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SetMetadata } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ShopifySessionPayload } from '../auth/shopify-session-token.guard';
 import { PLAN_ORDER, type Plan } from './plans';
@@ -41,8 +41,30 @@ export class PlanGuard implements CanActivate {
 
     const subscription = await this.prisma.subscription.findUnique({
       where: { shopDomain },
-      select: { plan: true, status: true },
+      select: { plan: true, status: true, graceEndsAt: true },
     });
+
+    const isExpiredOrCancelled =
+      subscription?.status === 'expired' || subscription?.status === 'cancelled';
+
+    const isInGracePeriod =
+      isExpiredOrCancelled &&
+      subscription?.graceEndsAt != null &&
+      subscription.graceEndsAt > new Date();
+
+    if (isInGracePeriod) {
+      const response = context.switchToHttp().getResponse<Response>();
+      response.setHeader('X-Subscription-Warning', 'grace_period');
+      response.setHeader(
+        'X-Grace-Ends-At',
+        subscription!.graceEndsAt!.toISOString(),
+      );
+      request.shopifyPlan =
+        subscription!.plan in PLAN_ORDER
+          ? (subscription!.plan as Plan)
+          : 'free';
+      return true;
+    }
 
     const currentPlan: Plan =
       subscription?.status === 'active' && subscription.plan in PLAN_ORDER

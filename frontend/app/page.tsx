@@ -56,6 +56,11 @@ type WebhookEvent = {
   createdAt: string;
 };
 
+type BillingStatus = {
+  status: string;
+  graceEndsAt: string | null;
+};
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -307,6 +312,7 @@ export default function DashboardPage() {
   const [clearDlqModalOpen, setClearDlqModalOpen] = useState(false);
   const [clearingDlq, setClearingDlq] = useState(false);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
+  const [gracePeriodDaysLeft, setGracePeriodDaysLeft] = useState<number | null>(null);
   const seenIdsRef = useRef(new Set<string>());
 
   const loadEvents = useCallback(
@@ -333,6 +339,32 @@ export default function DashboardPage() {
           const { count } = (await failedRes.json()) as { count: number };
           setFailedCount(count);
         }
+
+        const shop = new URLSearchParams(window.location.search).get('shop');
+        if (shop) {
+          try {
+            const billingRes = await fetch(
+              `/api/billing/status?shop=${encodeURIComponent(shop)}`,
+            );
+            if (billingRes.ok) {
+              const billing = (await billingRes.json()) as BillingStatus;
+              const isLapsed =
+                billing.status === 'expired' || billing.status === 'cancelled';
+              if (isLapsed && billing.graceEndsAt) {
+                const daysLeft = Math.ceil(
+                  (new Date(billing.graceEndsAt).getTime() - Date.now()) /
+                    (1000 * 60 * 60 * 24),
+                );
+                setGracePeriodDaysLeft(daysLeft > 0 ? daysLeft : null);
+              } else {
+                setGracePeriodDaysLeft(null);
+              }
+            }
+          } catch {
+            // non-fatal — grace period banner is best-effort
+          }
+        }
+
         setLastUpdated(new Date());
       } catch (err) {
         if (!silent)
@@ -436,6 +468,28 @@ export default function DashboardPage() {
       ]}
     >
       <Layout>
+        {/* Grace period banner */}
+        {gracePeriodDaysLeft !== null && (
+          <Layout.Section>
+            <Banner
+              tone="warning"
+              title="Your subscription has expired"
+              action={{
+                content: 'Renew now',
+                onAction: () => {
+                  window.location.href = '/billing' + window.location.search;
+                },
+              }}
+            >
+              <p>
+                You have {gracePeriodDaysLeft} day
+                {gracePeriodDaysLeft === 1 ? '' : 's'} remaining to renew
+                before losing access to paid features.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         {/* Failed jobs banner */}
         {failedCount > 0 && (
           <Layout.Section>
