@@ -604,6 +604,7 @@ describe('BillingService', () => {
         2,
         expect.any(String),
         expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           variables: expect.objectContaining({
             price: { amount: '5.00', currencyCode: 'USD' },
           }),
