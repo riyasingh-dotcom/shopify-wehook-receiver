@@ -303,6 +303,7 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [tab, setTab] = useState(0);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [planGateModal, setPlanGateModal] = useState<{ requiredPlan: string } | null>(null);
   const [clearDlqModalOpen, setClearDlqModalOpen] = useState(false);
   const [clearingDlq, setClearingDlq] = useState(false);
   const [toast, setToast] = useState<{ message: string; error: boolean } | null>(null);
@@ -354,6 +355,13 @@ export default function DashboardPage() {
           `/webhooks/events/${id}/reprocess`,
           { method: 'POST' },
         );
+        if (res.status === 403) {
+          const body = (await res.json()) as { error?: string; requiredPlan?: string };
+          if (body.error === 'plan_required') {
+            setPlanGateModal({ requiredPlan: body.requiredPlan ?? 'basic' });
+            return;
+          }
+        }
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         setToast({ message: 'Event reprocessed', error: false });
         await loadEvents(true);
@@ -653,6 +661,24 @@ export default function DashboardPage() {
           </Card>
         </Layout.Section>
       </Layout>
+
+      <Modal
+        open={planGateModal !== null}
+        onClose={() => setPlanGateModal(null)}
+        title="Upgrade required"
+        primaryAction={{
+          content: `Upgrade to ${(planGateModal?.requiredPlan ?? 'basic').charAt(0).toUpperCase() + (planGateModal?.requiredPlan ?? 'basic').slice(1)}`,
+          onAction: () => { window.location.href = '/billing'; },
+        }}
+        secondaryActions={[{ content: 'Not now', onAction: () => setPlanGateModal(null) }]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            Reprocessing failed jobs requires the <strong>{planGateModal?.requiredPlan}</strong> plan or above.
+            Upgrade to unlock this feature and keep your webhook pipeline running smoothly.
+          </Text>
+        </Modal.Section>
+      </Modal>
 
       <Modal
         open={clearDlqModalOpen}
