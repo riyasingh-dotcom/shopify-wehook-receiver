@@ -72,7 +72,10 @@ Shopify → POST /webhooks/shopify
            ↓ HMAC verified (raw Buffer required — see body parser note)
            ↓ job pushed to BullMQ queue "webhook-processing"
            ↓ WebhookProcessor picks up job
-           ↓ routes by topic → handleOrderCreated / handleProductUpdated
+           ↓ routes by topic:
+               orders/create             → WebhooksService.handleOrderCreated
+               products/update           → WebhooksService.handleProductUpdated
+               app_subscriptions/update  → BillingService.handleSubscriptionUpdate
            ↓ writes to PostgreSQL (Prisma)
 
 Next.js frontend (embedded in Shopify Admin iframe)
@@ -84,22 +87,24 @@ Next.js frontend (embedded in Shopify Admin iframe)
 ### Backend modules
 
 **`src/webhooks/`** — core feature:
-- `webhooks.controller.ts` — `POST /webhooks/shopify` (queues job), `GET /webhooks/events` (reads DB), `POST /webhooks/events/:id/reprocess` (@RequiresPlan('basic')), `GET /webhooks/product-history` (@RequiresPlan('basic'))
+- `webhooks.controller.ts` — `POST /webhooks/shopify` (queues job), `GET /webhooks/events`, `GET /webhooks/failed-count`, `GET /webhooks/failed-jobs`, `DELETE /webhooks/failed-jobs`, `POST /webhooks/events/:id/reprocess` (@RequiresPlan('basic')), `GET /webhooks/product-history` (@RequiresPlan('basic'))
 - `webhooks.service.ts` — HMAC verification, `handleOrderCreated`, `handleProductUpdated`, `getEvents`, `getProductHistory(days)`
-- `webhook.processor.ts` — BullMQ `@Processor('webhook-processing')` — routes jobs by topic, calls service, marks processed
+- `webhook.processor.ts` — BullMQ `@Processor('webhook-processing')` — switch on topic (`orders/create`, `products/update`, `app_subscriptions/update`), calls service, marks processed; `@OnWorkerEvent('failed')` writes `FailedJob` only on permanent failure
 - `order-payload.ts` — Zod-style parsing of raw Shopify order JSON
 - `product-diff.ts` — diffs previous product snapshot vs incoming payload; tracks `title`, `status`, `published_at`, and variant prices
 - `webhooks.types.ts` — `WebhookJobData` type shared between controller and processor
 
 **`src/billing/`** — Shopify Billing API + plan gating:
 - `plans.ts` — `PLANS` config (free/basic/pro), `Plan` type, `PlanFeatures` type, `PLAN_ORDER` (`{ free:0, basic:1, pro:2 }`)
-- `plan.guard.ts` — `PlanGuard` (reads `request.shopifySession.dest`, looks up `Subscription`, compares `PLAN_ORDER`) and `@RequiresPlan('basic'|'pro')` decorator. Always chain after `ShopifySessionTokenGuard`: `@UseGuards(ShopifySessionTokenGuard, PlanGuard)`. Throws `ForbiddenException({ error:'plan_required', requiredPlan, currentPlan, upgradeUrl:'/billing/upgrade' })`.
+- `plan.guard.ts` — `PlanGuard` (reads `request.shopifySession.dest`, looks up `Subscription`, compares `PLAN_ORDER`) and `@RequiresPlan('basic'|'pro')` decorator. Always chain after `ShopifySessionTokenGuard`: `@UseGuards(ShopifySessionTokenGuard, PlanGuard)`. Grace period logic: if status is `expired`/`cancelled` and `graceEndsAt > now`, allows access and sets `X-Subscription-Warning: grace_period` + `X-Grace-Ends-At` response headers. Otherwise throws `ForbiddenException({ error:'plan_required', requiredPlan, currentPlan, upgradeUrl:'/billing/upgrade' })`.
 - `billing.controller.ts` — `POST /billing/subscribe` (body: `{ shopDomain, plan, sessionToken }`), `GET /billing/status?shop=`, `GET /billing/callback`
-- `billing.service.ts` — `createSubscription` (exchanges session token → Shopify GraphQL → upserts Subscription row; throws 409 if shop already has active subscription), `getStatus` (returns plan+features; falls back to free if subscription is not active), `handleCallback`
+- `billing.service.ts` — `createSubscription` (exchanges session token → Shopify GraphQL → upserts Subscription row; throws 409 if shop already has active subscription), `getStatus` (returns plan+features; falls back to free if subscription is not active), `handleCallback`, `handleSubscriptionUpdate` (Zod-validates `app_subscriptions/update` payload, maps Shopify status → DB status, sets `graceEndsAt = now+3d` on expired/cancelled, clears it on active)
 
 **`src/auth/shopify-session-token.guard.ts`** — `ShopifySessionTokenGuard`: verifies Shopify session JWT, attaches `request.shopifySession = { dest: 'https://shop.myshopify.com' }`. Apply before `PlanGuard`. Not applied to `GET /webhooks/events` intentionally.
 
 **`src/shopify/shopify.module.ts`** — exports `SHOPIFY_INSTANCE` (Symbol) containing the configured `@shopify/shopify-api` instance. **Not global** — import `ShopifyModule` explicitly in any module that needs it. Override `SHOPIFY_INSTANCE` in tests to avoid real API calls.
+
+**`src/products/products.controller.ts`** — `GET /products/changes` (unguarded); delegates to `WebhooksService.getProductChanges()`.
 
 **`src/prisma/`** — `PrismaModule` (global) and `PrismaService`. Available everywhere without importing.
 
@@ -113,7 +118,7 @@ Next.js frontend (embedded in Shopify Admin iframe)
 | `Product` | Latest full Shopify product payload snapshot (diff baseline) |
 | `ProductChangeLog` | Per-field audit trail; written atomically with `Product` upsert in a `$transaction` |
 | `FailedJob` | Persistent record of BullMQ jobs that exhausted retries |
-| `Subscription` | Per-shop billing record — `shopDomain` unique, tracks `plan`, `status`, `shopifyChargeId`, `accessToken` |
+| `Subscription` | Per-shop billing record — `shopDomain` unique, tracks `plan`, `status`, `shopifyChargeId`, `accessToken`, `graceEndsAt` |
 
 **Product change tracking:** `handleProductUpdated` reads current `Product` snapshot → diffs via `detectProductChanges` → single `$transaction` upserts snapshot and creates `ProductChangeLog` rows. `getEvents` unifies `WebhookEvent` + `ProductChangeLog` into one sorted list.
 
@@ -194,3 +199,5 @@ const mockSessionGuard = {
 ```
 
 **E2e test isolation:** `test/jest-e2e.json` sets `maxWorkers: 1` — all suites run sequentially against the shared test DB. Scope `deleteMany` calls in `beforeEach` to the suite's `TEST_SHOP` to avoid cross-suite interference.
+
+**Coverage thresholds:** `package.json` jest config enforces `lines: 60, functions: 60` globally. CI runs `pnpm test:cov` — Jest exits non-zero (blocks merge) if either threshold is breached. `TEST_DATABASE_URL` must be set as a GitHub Actions secret for the CI coverage step to pass.
