@@ -276,3 +276,48 @@ The cap. Without writing the cap test first, I probably would have written `over
 Yes — for pure functions with clear rules. `calculateOverageCharge` is a perfect TDD candidate: no database, no network, no side effects. The inputs and outputs are numbers. The business rules can be expressed as exact assertions. TDD shines here because you can write all the test cases in 2 minutes and they tell you exactly what the function must do.
 
 I would not reach for TDD first when dealing with something like a NestJS controller or a database query — those have too many moving parts to specify upfront in isolation. But for any pure calculation function — pricing logic, discount rules, validation — writing the tests first is faster overall because it catches edge cases before the implementation exists.
+
+---
+
+## Billing Test Coverage Audit — Day 5
+
+### billing.service.ts
+- **Coverage:** 87.17% lines, 81.81% functions
+- **Tested functions:** `getStatus`, `createSubscription`, `handleCallback`, `handleSubscriptionUpdate`, `createUsageCharge`, `calculateOverageCharge`
+- **Untested functions:** `resolveShopByChargeId`, `testToken`
+- **Untested function with highest business impact:** `resolveShopByChargeId` — it is the fallback path in the billing callback when Shopify omits the `shop` query param. If it returns the wrong shop domain, the wrong merchant's subscription gets updated. It is a DB lookup so failure would silently redirect the wrong merchant. Added to controller tests indirectly; direct service-level test added in Day 5 cleanup.
+
+### billing.controller.ts
+- **Coverage:** 67.92% lines, 50% functions (before Day 5 fixes)
+- **Untested controller methods:** `getStatus` endpoint, `subscribe` endpoint — both added in Day 5 cleanup.
+
+### Business impact question
+If I deployed a bug in the billing service to production right now, `handleCallback` would most likely cause a merchant to be incorrectly charged or incorrectly lose access — it is the function that transitions a subscription from `pending` to `active` after the merchant approves billing. If it silently fails or marks the wrong status, the merchant paid but gets no access. **This function is tested** (6 tests covering ACTIVE, DECLINED, unknown status, missing subscription, missing accessToken, and full GID passthrough).
+
+---
+
+## Billing Lifecycle Walkthrough — Day 5
+
+> Complete this table by walking through each step in your dev store.
+
+| Step | Description | Result |
+|---|---|---|
+| 1 | Install app on dev store | |
+| 2 | Confirm `plan: free`, `status: active` in DB | |
+| 3 | Access `@RequiresPlan('basic')` endpoint — expect 403 | |
+| 4 | Click Upgrade → Basic on pricing page | |
+| 5 | Confirm redirect to Shopify billing approval page | |
+| 6 | Approve charge (test mode) | |
+| 7 | Confirm redirect back to app | |
+| 8 | Confirm `plan: basic`, `status: active` in DB | |
+| 9 | Access gated endpoint — confirm it now works | |
+| 10 | Set `status: expired`, `graceEndsAt: now + 1 hour` in DB | |
+| 11 | Access gated endpoint — confirm `X-Subscription-Warning: grace_period` header | |
+| 12 | Confirm grace period banner shows in embedded app | |
+| 13 | Set `graceEndsAt: 1 hour ago` in DB | |
+| 14 | Access gated endpoint — confirm 403 with `subscription_expired` | |
+| 15 | Set `eventsProcessedThisMonth: 5500` in DB | |
+| 16 | Trigger `createUsageCharge` — confirm Shopify usage charge in test mode | |
+| 17 | Confirm overage capped at $5.00 | |
+| 18 | Simulate `app_subscriptions/update` webhook with `CANCELLED` | |
+| 19 | Confirm `graceEndsAt` set in DB | |
