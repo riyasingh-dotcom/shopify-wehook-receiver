@@ -8,9 +8,10 @@ import { useNavigate } from '@/lib/use-navigate';
 const TABS = [
   { id: 'dashboard', content: 'Dashboard' },
   { id: 'products', content: 'Product Change History' },
+  { id: 'billing', content: 'Billing & Plans' },
 ];
 
-const PATHS = ['/', '/products'] as const;
+const PATHS = ['/', '/products', '/billing'] as const;
 
 export function AppNavTabs() {
   const pathname = usePathname();

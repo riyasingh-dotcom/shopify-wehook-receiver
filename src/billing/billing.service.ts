@@ -12,8 +12,9 @@ import {
 } from '@shopify/shopify-api';
 import { PrismaService } from '../prisma/prisma.service';
 import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
+import { PLANS, PLAN_ORDER, type Plan, type PlanFeatures } from './plans';
 
-export type Plan = 'basic' | 'pro';
+export type SubscribablePlan = Exclude<Plan, 'free'>;
 
 export type CreateSubscriptionResult = {
   confirmationUrl: string;
@@ -21,10 +22,18 @@ export type CreateSubscriptionResult = {
 
 export type CallbackStatus = 'ACTIVE' | 'DECLINED' | 'OTHER';
 
-const PLAN_CONFIG: Record<Plan, { name: string; amount: string }> = {
-  basic: { name: 'Basic Plan', amount: '9.00' },
-  pro: { name: 'Pro Plan', amount: '29.00' },
+export type SubscriptionStatus = {
+  plan: Plan;
+  status: string;
+  trialEndsAt: Date | null;
+  features: PlanFeatures;
 };
+
+const PLAN_CONFIG: Record<SubscribablePlan, { name: string; amount: string }> =
+  {
+    basic: { name: 'Basic Plan', amount: '9.00' },
+    pro: { name: 'Pro Plan', amount: '29.00' },
+  };
 
 const SHOPIFY_GID_PREFIX = 'gid://shopify/AppSubscription/';
 
@@ -87,9 +96,38 @@ export class BillingService {
     @Inject(SHOPIFY_INSTANCE) private readonly shopify: Shopify,
   ) {}
 
+  async getStatus(shopDomain: string): Promise<SubscriptionStatus> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { shopDomain },
+      select: { plan: true, status: true, trialEndsAt: true },
+    });
+
+    if (!subscription) {
+      return {
+        plan: 'free',
+        status: 'active',
+        trialEndsAt: null,
+        features: PLANS.free.features,
+      };
+    }
+
+    const isActive = subscription.status === 'active';
+    const plan: Plan =
+      isActive && subscription.plan in PLAN_ORDER
+        ? (subscription.plan as Plan)
+        : 'free';
+
+    return {
+      plan,
+      status: subscription.status,
+      trialEndsAt: subscription.trialEndsAt,
+      features: PLANS[plan].features,
+    };
+  }
+
   async createSubscription(
     shopDomain: string,
-    plan: Plan,
+    plan: SubscribablePlan,
     sessionToken: string,
   ): Promise<CreateSubscriptionResult> {
     const returnUrl = this.config.getOrThrow<string>('BILLING_RETURN_URL');

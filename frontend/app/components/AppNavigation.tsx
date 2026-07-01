@@ -11,6 +11,7 @@ export function AppNavigation() {
         Dashboard
       </a>
       <a href="/products">Product Changes</a>
+      <a href="/billing">Billing &amp; Plans</a>
     </NavMenu>
   );
 }

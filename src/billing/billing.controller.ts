@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
-import { BillingService } from './billing.service';
+import { BillingService, type SubscriptionStatus } from './billing.service';
 
 const CallbackQuerySchema = z.object({
   charge_id: z.string().min(1),
@@ -30,6 +30,18 @@ export class BillingController {
     private readonly billingService: BillingService,
     private readonly config: ConfigService,
   ) {}
+
+  @Get('status')
+  async getStatus(@Query('shop') shop: unknown): Promise<SubscriptionStatus> {
+    const schema = z
+      .string()
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/);
+    const parsed = schema.safeParse(shop);
+    if (!parsed.success) {
+      throw new BadRequestException('Invalid or missing shop domain');
+    }
+    return await this.billingService.getStatus(parsed.data);
+  }
 
   @Post('test-token')
   async testToken(
