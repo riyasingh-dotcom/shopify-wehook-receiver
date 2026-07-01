@@ -102,7 +102,12 @@ export class BillingService {
   async getStatus(shopDomain: string): Promise<SubscriptionStatus> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { shopDomain },
-      select: { plan: true, status: true, trialEndsAt: true, graceEndsAt: true },
+      select: {
+        plan: true,
+        status: true,
+        trialEndsAt: true,
+        graceEndsAt: true,
+      },
     });
 
     if (!subscription) {

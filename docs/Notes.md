@@ -201,3 +201,56 @@ Shopify doesn't fire a separate "charge failed" webhook. Instead, when billing f
 
 ## What is a "frozen" subscription
 A frozen subscription means the merchant's Shopify store itself has been suspended — typically because Shopify couldn't collect their platform subscription fee (not your app's fee). While frozen, the merchant can't use the Shopify Admin at all, so they can't use your app either. Your app should detect FROZEN status and pause access gracefully. When Shopify unfreezes the store (merchant pays their bill), the subscription transitions back to ACTIVE and you get another app_subscriptions/update. Don't delete their data when frozen — it's a temporary hold, not a cancellation.
+
+---
+
+## Day 3 — Coverage Report (2026-07-01)
+
+### Coverage table
+
+```
+File                             | % Stmts | % Branch | % Funcs | % Lines
+---------------------------------|---------|----------|---------|--------
+All files                        |   76.47 |    67.46 |   67.74 |   76.16
+ auth/shopify-session-token.guard|   31.25 |        0 |       0 |   21.42
+ billing/billing.controller.ts   |   67.85 |    64.28 |      50 |   67.92
+ billing/billing.service.ts      |   79.31 |       70 |    62.5 |   78.57
+ billing/plan.guard.ts           |     100 |       88 |     100 |     100
+ billing/plans.ts                |     100 |      100 |     100 |     100
+ prisma/prisma.service.ts        |   71.42 |      100 |       0 |      60
+ products/products.controller.ts |     100 |       75 |     100 |     100
+ webhooks/order-payload.ts       |   88.88 |    66.66 |     100 |   88.88
+ webhooks/product-diff.ts        |    91.3 |       85 |     100 |   97.56
+ webhooks/webhook.processor.ts   |   56.41 |    58.82 |   66.66 |   51.42
+ webhooks/webhooks.controller.ts |   43.13 |     36.5 |   22.22 |   42.55
+ webhooks/webhooks.service.ts    |    96.2 |    90.56 |   89.47 |   97.26
+```
+
+### Gap analysis
+
+- **webhooks.controller.ts (42% lines)** — biggest gap. The reprocess endpoint, product-history endpoint, and failed-jobs routes have zero test coverage. These are integration-test candidates (supertest against the full NestJS app).
+- **webhook.processor.ts (51% lines)** — the processor's error path (permanent failure → FailedJob write) and the `app_subscriptions/update` branch added in Day 3 are not covered. Unit tests need a mock BillingService.
+- **auth/shopify-session-token.guard.ts (21% lines)** — almost entirely untested. The JWT verification path (lines 31–52) is skipped in every test because the guard is overridden. Needs its own isolated unit test with a mocked `jsonwebtoken.verify`.
+- **billing.service.ts (78% lines)** — `getStatus` and `resolveShopByChargeId` (lines 103–129, 240–247) not covered. `testToken` (lines 370–388) is a debug helper — low priority.
+- **billing.controller.ts (67% lines)** — callback redirect and subscribe error branches (lines 36–76) missing coverage.
+
+### Before / after functions coverage
+
+| Point | Functions |
+|---|---|
+| Before Task 4 (webhooks.service) | 48.38% |
+| After Task 4 | 67.74% |
+
+Most surprising uncovered line: `webhooks.service.ts:170–182` — the error branch inside `getEvents` that merges `ProductChangeLog` entries. The happy path is covered but the empty-array edge case isn't.
+
+### Friday flag
+
+**What was built:** `app_subscriptions/update` webhook handler + grace period logic (PlanGuard headers + frontend banner) + CI coverage gate at 60%.
+
+**Overall coverage % before adding tests:** ~48% functions / ~65% lines
+
+**Overall coverage % after:** 67.74% functions / 76.16% lines
+
+**Most surprising uncovered line:** `webhooks.controller.ts` — 22% function coverage means most controller handlers have zero tests. Controllers look simple but they wire guards, decorators, and response codes — integration tests here catch bugs that unit tests on the service miss entirely.
+
+**One thing not fully understood yet:** Why BullMQ's `attemptsMade >= attempts` check is needed before writing `FailedJob` — BullMQ fires the `failed` event on every failed attempt, not just the last one, so without that guard you'd write a `FailedJob` row on the first retry too.

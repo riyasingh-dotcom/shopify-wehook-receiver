@@ -45,7 +45,8 @@ export class PlanGuard implements CanActivate {
     });
 
     const isExpiredOrCancelled =
-      subscription?.status === 'expired' || subscription?.status === 'cancelled';
+      subscription?.status === 'expired' ||
+      subscription?.status === 'cancelled';
 
     const isInGracePeriod =
       isExpiredOrCancelled &&
@@ -57,12 +58,10 @@ export class PlanGuard implements CanActivate {
       response.setHeader('X-Subscription-Warning', 'grace_period');
       response.setHeader(
         'X-Grace-Ends-At',
-        subscription!.graceEndsAt!.toISOString(),
+        subscription.graceEndsAt!.toISOString(),
       );
       request.shopifyPlan =
-        subscription!.plan in PLAN_ORDER
-          ? (subscription!.plan as Plan)
-          : 'free';
+        subscription.plan in PLAN_ORDER ? (subscription.plan as Plan) : 'free';
       return true;
     }
 
