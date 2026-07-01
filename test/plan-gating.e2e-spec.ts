@@ -88,9 +88,20 @@ describe('Plan-gated endpoints (integration)', () => {
     mockQueueAdd.mockReset();
     await Promise.all([
       prisma.subscription.deleteMany({ where: { shopDomain: TEST_SHOP } }),
-      prisma.webhookEvent.deleteMany(),
-      prisma.productChangeLog.deleteMany(),
-      prisma.product.deleteMany(),
+      prisma.webhookEvent.deleteMany({ where: { shopDomain: TEST_SHOP } }),
+      prisma.productChangeLog.deleteMany({
+        where: {
+          shopifyId: {
+            in: await prisma.product
+              .findMany({
+                where: { shopDomain: TEST_SHOP },
+                select: { id: true },
+              })
+              .then((ps) => ps.map((p) => p.id)),
+          },
+        },
+      }),
+      prisma.product.deleteMany({ where: { shopDomain: TEST_SHOP } }),
       prisma.failedJob.deleteMany(),
     ]);
   });

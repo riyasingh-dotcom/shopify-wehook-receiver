@@ -7,5 +7,6 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "setupFiles": ["dotenv/config"],
-  "forceExit": true
+  "forceExit": true,
+  "maxWorkers": 1
 }

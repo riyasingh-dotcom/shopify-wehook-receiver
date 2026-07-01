@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -130,6 +131,17 @@ export class BillingService {
     plan: SubscribablePlan,
     sessionToken: string,
   ): Promise<CreateSubscriptionResult> {
+    const existing = await this.prisma.subscription.findUnique({
+      where: { shopDomain },
+      select: { status: true },
+    });
+    if (existing?.status === 'active') {
+      throw new ConflictException({
+        error: 'active_subscription_exists',
+        message: 'This shop already has an active subscription',
+      });
+    }
+
     const returnUrl = this.config.getOrThrow<string>('BILLING_RETURN_URL');
     const { name, amount } = PLAN_CONFIG[plan];
 
