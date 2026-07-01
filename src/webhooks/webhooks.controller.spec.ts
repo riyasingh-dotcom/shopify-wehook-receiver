@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { WebhooksController } from './webhooks.controller';
 import { WebhooksService } from './webhooks.service';
+import { ShopifySessionTokenGuard } from '../auth/shopify-session-token.guard';
+import { PlanGuard } from '../billing/plan.guard';
+
+const passGuard = { canActivate: () => true };
 
 describe('WebhooksController', () => {
   let controller: WebhooksController;
@@ -29,7 +33,12 @@ describe('WebhooksController', () => {
           useValue: { add: jest.fn() },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(ShopifySessionTokenGuard)
+      .useValue(passGuard)
+      .overrideGuard(PlanGuard)
+      .useValue(passGuard)
+      .compile();
 
     controller = module.get<WebhooksController>(WebhooksController);
   });

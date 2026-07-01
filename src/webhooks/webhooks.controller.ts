@@ -10,12 +10,20 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Request } from 'express';
 import { WebhooksService, type WebhookEventDto } from './webhooks.service';
 import type { WebhookJobData } from './webhooks.types';
+import { ShopifySessionTokenGuard } from '../auth/shopify-session-token.guard';
+import { PlanGuard, RequiresPlan } from '../billing/plan.guard';
+import { PLANS, type Plan } from '../billing/plans';
+
+type AuthenticatedRequest = Request & {
+  shopifyPlan: Plan;
+};
 
 @Controller('webhooks')
 export class WebhooksController {
@@ -48,8 +56,18 @@ export class WebhooksController {
     return this.webhooksService.clearFailedJobs();
   }
 
+  @Get('product-history')
+  @UseGuards(ShopifySessionTokenGuard, PlanGuard)
+  @RequiresPlan('basic')
+  async getProductHistory(@Req() req: AuthenticatedRequest) {
+    const days = PLANS[req.shopifyPlan].features.productChangesHistory;
+    return this.webhooksService.getProductHistory(days);
+  }
+
   @Post('events/:id/reprocess')
   @HttpCode(200)
+  @UseGuards(ShopifySessionTokenGuard, PlanGuard)
+  @RequiresPlan('basic')
   async reprocessEvent(@Param('id') id: string): Promise<void> {
     const events = await this.webhooksService.getEvents('all');
     const event = events.find((e) => e.id === id);

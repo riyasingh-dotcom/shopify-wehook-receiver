@@ -214,6 +214,43 @@ export class WebhooksService {
     return { deleted: count };
   }
 
+  async getProductHistory(days: number): Promise<
+    {
+      id: string;
+      productTitle: string;
+      fieldChanged: string;
+      oldValue: string;
+      newValue: string;
+      changedAt: Date;
+    }[]
+  > {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const rows = await this.prisma.productChangeLog.findMany({
+      where: { changedAt: { gte: since } },
+      orderBy: { changedAt: 'desc' },
+      take: 500,
+      select: {
+        id: true,
+        productTitle: true,
+        field: true,
+        oldValue: true,
+        newValue: true,
+        changedAt: true,
+      },
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      productTitle: r.productTitle,
+      fieldChanged: r.field,
+      oldValue: r.oldValue ?? '',
+      newValue: r.newValue,
+      changedAt: r.changedAt,
+    }));
+  }
+
   async handleProductUpdated(
     raw: unknown,
     shopDomain: string,
