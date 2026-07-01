@@ -454,6 +454,146 @@ describe('BillingService', () => {
     });
   });
 
+  describe('createUsageCharge', () => {
+    const shopDomain = 'test-shop.myshopify.com';
+    const lineItemId = 'gid://shopify/AppSubscriptionLineItem/456';
+
+    const activeSubscription = {
+      id: 'sub-1',
+      shopDomain,
+      plan: 'basic',
+      status: 'active',
+      accessToken: 'shpat_token',
+      shopifyChargeId: 'gid://shopify/AppSubscription/123',
+    };
+
+    const makeLineItemsResponse = () => ({
+      data: { node: { lineItems: [{ id: lineItemId }] } },
+    });
+
+    const makeUsageResponse = (
+      overrides: Partial<{
+        userErrors: { field: string[]; message: string }[];
+        appUsageRecord: { id: string; createdAt: string } | null;
+      }> = {},
+    ) => ({
+      data: {
+        appUsageRecordCreate: {
+          userErrors: [],
+          appUsageRecord: {
+            id: 'gid://shopify/AppUsageRecord/789',
+            createdAt: '2026-07-01T00:00:00Z',
+          },
+          ...overrides,
+        },
+      },
+    });
+
+    it('returns null when no subscription found', async () => {
+      mockFindUnique.mockResolvedValueOnce(null);
+
+      const result = await service.createUsageCharge(shopDomain, 6000);
+
+      expect(result).toBeNull();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('returns null when subscription is not active', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        ...activeSubscription,
+        status: 'expired',
+      });
+
+      const result = await service.createUsageCharge(shopDomain, 6000);
+
+      expect(result).toBeNull();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('returns null without calling Shopify when overage is 0', async () => {
+      mockFindUnique.mockResolvedValueOnce(activeSubscription);
+
+      // 5000 events = at limit, no overage
+      const result = await service.createUsageCharge(shopDomain, 5000);
+
+      expect(result).toBeNull();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('calls Shopify and returns charge record when overage > 0', async () => {
+      mockFindUnique.mockResolvedValueOnce(activeSubscription);
+      mockRequest
+        .mockResolvedValueOnce(makeLineItemsResponse())
+        .mockResolvedValueOnce(makeUsageResponse());
+
+      const result = await service.createUsageCharge(shopDomain, 6000);
+
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('appUsageRecordCreate'),
+        expect.objectContaining({
+          variables: {
+            subscriptionLineItemId: lineItemId,
+            price: { amount: '1.00', currencyCode: 'USD' },
+            description: 'Webhook events overage: 6000 events',
+          },
+        }),
+      );
+      expect(result).toEqual({
+        id: 'gid://shopify/AppUsageRecord/789',
+        createdAt: '2026-07-01T00:00:00Z',
+      });
+    });
+
+    it('caps the charge at $5.00 when sent to Shopify', async () => {
+      mockFindUnique.mockResolvedValueOnce(activeSubscription);
+      mockRequest
+        .mockResolvedValueOnce(makeLineItemsResponse())
+        .mockResolvedValueOnce(makeUsageResponse());
+
+      await service.createUsageCharge(shopDomain, 15000);
+
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          variables: expect.objectContaining({
+            price: { amount: '5.00', currencyCode: 'USD' },
+          }),
+        }),
+      );
+    });
+
+    it('throws InternalServerErrorException when Shopify returns userErrors', async () => {
+      mockFindUnique.mockResolvedValueOnce(activeSubscription);
+      mockRequest
+        .mockResolvedValueOnce(makeLineItemsResponse())
+        .mockResolvedValueOnce(
+          makeUsageResponse({
+            userErrors: [{ field: ['price'], message: 'Amount exceeds cap' }],
+            appUsageRecord: null,
+          }),
+        );
+
+      await expect(service.createUsageCharge(shopDomain, 6000)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('returns null when subscription has no accessToken', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        ...activeSubscription,
+        accessToken: null,
+      });
+
+      const result = await service.createUsageCharge(shopDomain, 6000);
+
+      expect(result).toBeNull();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+  });
+
   describe('calculateOverageCharge', () => {
     it('returns 0 for free plan regardless of events', () => {
       expect(service.calculateOverageCharge('free', 99999)).toBe(0);

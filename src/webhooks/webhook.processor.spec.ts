@@ -72,3 +72,105 @@ describe('WebhookProcessor.handleFailed', () => {
     expect(prismaCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('WebhookProcessor.process', () => {
+  let processor: WebhookProcessor;
+  let handleOrderCreated: jest.Mock;
+  let handleProductUpdated: jest.Mock;
+  let markProcessed: jest.Mock;
+  let handleSubscriptionUpdate: jest.Mock;
+  let subscriptionUpdateMany: jest.Mock;
+
+  beforeEach(async () => {
+    handleOrderCreated = jest.fn().mockResolvedValue('event-1');
+    handleProductUpdated = jest.fn().mockResolvedValue('event-2');
+    markProcessed = jest.fn().mockResolvedValue(undefined);
+    handleSubscriptionUpdate = jest.fn().mockResolvedValue(undefined);
+    subscriptionUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+
+    const module = await Test.createTestingModule({
+      providers: [
+        WebhookProcessor,
+        {
+          provide: WebhooksService,
+          useValue: { handleOrderCreated, handleProductUpdated, markProcessed },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            failedJob: { create: jest.fn() },
+            subscription: { updateMany: subscriptionUpdateMany },
+          },
+        },
+        { provide: BillingService, useValue: { handleSubscriptionUpdate } },
+      ],
+    }).compile();
+
+    processor = module.get(WebhookProcessor);
+  });
+
+  it('handles orders/create and increments eventsProcessedThisMonth', async () => {
+    const job = mockJob({
+      data: {
+        topic: 'orders/create',
+        shopDomain: 'test.myshopify.com',
+        shopifyId: 'sid-1',
+        payload: {},
+      },
+    });
+
+    await processor.process(job);
+
+    expect(handleOrderCreated).toHaveBeenCalledWith({}, 'test.myshopify.com');
+    expect(markProcessed).toHaveBeenCalledWith('event-1');
+    expect(subscriptionUpdateMany).toHaveBeenCalledWith({
+      where: { shopDomain: 'test.myshopify.com' },
+      data: { eventsProcessedThisMonth: { increment: 1 } },
+    });
+  });
+
+  it('handles products/update and increments eventsProcessedThisMonth', async () => {
+    const job = mockJob({
+      data: {
+        topic: 'products/update',
+        shopDomain: 'test.myshopify.com',
+        shopifyId: 'sid-2',
+        payload: {},
+      },
+    });
+
+    await processor.process(job);
+
+    expect(handleProductUpdated).toHaveBeenCalledWith({}, 'test.myshopify.com');
+    expect(markProcessed).toHaveBeenCalledWith('event-2');
+    expect(subscriptionUpdateMany).toHaveBeenCalledWith({
+      where: { shopDomain: 'test.myshopify.com' },
+      data: { eventsProcessedThisMonth: { increment: 1 } },
+    });
+  });
+
+  it('handles app_subscriptions/update without incrementing events', async () => {
+    const job = mockJob({
+      data: {
+        topic: 'app_subscriptions/update',
+        shopDomain: 'test.myshopify.com',
+        shopifyId: 'sid-3',
+        payload: {},
+      },
+    });
+
+    await processor.process(job);
+
+    expect(handleSubscriptionUpdate).toHaveBeenCalledWith({});
+    expect(markProcessed).not.toHaveBeenCalled();
+    expect(subscriptionUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rethrows errors so BullMQ can retry', async () => {
+    handleOrderCreated.mockRejectedValueOnce(new Error('db down'));
+    const job = mockJob();
+
+    await expect(processor.process(job)).rejects.toThrow('db down');
+    expect(subscriptionUpdateMany).not.toHaveBeenCalled();
+  });
+});

@@ -76,6 +76,10 @@ export class WebhookProcessor extends WorkerHost {
 
       if (eventId !== null) {
         await this.webhooksService.markProcessed(eventId);
+        await this.prisma.subscription.updateMany({
+          where: { shopDomain },
+          data: { eventsProcessedThisMonth: { increment: 1 } },
+        });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

@@ -77,6 +77,41 @@ const GET_APP_SUBSCRIPTION_QUERY = `#graphql
   }
 `;
 
+const GET_SUBSCRIPTION_LINE_ITEMS_QUERY = `#graphql
+  query GetSubscriptionLineItems($id: ID!) {
+    node(id: $id) {
+      ... on AppSubscription {
+        lineItems {
+          id
+        }
+      }
+    }
+  }
+`;
+
+const APP_USAGE_RECORD_CREATE_MUTATION = `#graphql
+  mutation AppUsageRecordCreate(
+    $subscriptionLineItemId: ID!
+    $price: MoneyInput!
+    $description: String!
+  ) {
+    appUsageRecordCreate(
+      subscriptionLineItemId: $subscriptionLineItemId
+      price: $price
+      description: $description
+    ) {
+      userErrors {
+        field
+        message
+      }
+      appUsageRecord {
+        id
+        createdAt
+      }
+    }
+  }
+`;
+
 type AppSubscriptionCreateData = {
   appSubscriptionCreate: {
     userErrors: { field: string[]; message: string }[];
@@ -88,6 +123,19 @@ type AppSubscriptionCreateData = {
 type GetAppSubscriptionData = {
   node: { id: string; status: string } | null;
 };
+
+type GetSubscriptionLineItemsData = {
+  node: { lineItems: { id: string }[] } | null;
+};
+
+type AppUsageRecordCreateData = {
+  appUsageRecordCreate: {
+    userErrors: { field: string[]; message: string }[];
+    appUsageRecord: { id: string; createdAt: string } | null;
+  };
+};
+
+export type UsageChargeRecord = { id: string; createdAt: string };
 
 @Injectable()
 export class BillingService {
@@ -361,6 +409,96 @@ export class BillingService {
     this.logger.log(
       `handleSubscriptionUpdate shop=${subscription.shopDomain} chargeId=${chargeId} status=${dbStatus}`,
     );
+  }
+
+  async createUsageCharge(
+    shopDomain: string,
+    eventsCount: number,
+  ): Promise<UsageChargeRecord | null> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { shopDomain },
+    });
+
+    if (!subscription || subscription.status !== 'active') {
+      return null;
+    }
+
+    const overageCharge = this.calculateOverageCharge(
+      subscription.plan as Plan,
+      eventsCount,
+    );
+
+    if (overageCharge === 0) {
+      return null;
+    }
+
+    if (!subscription.accessToken || !subscription.shopifyChargeId) {
+      this.logger.error(
+        `createUsageCharge: missing accessToken or chargeId for shop=${shopDomain}`,
+      );
+      return null;
+    }
+
+    const session = new Session({
+      id: `offline_${shopDomain}`,
+      shop: shopDomain,
+      state: '',
+      isOnline: false,
+      accessToken: subscription.accessToken,
+    });
+
+    const client = new this.shopify.clients.Graphql({ session });
+
+    const subResponse = await client.request<GetSubscriptionLineItemsData>(
+      GET_SUBSCRIPTION_LINE_ITEMS_QUERY,
+      { variables: { id: subscription.shopifyChargeId } },
+    );
+
+    const lineItemId = subResponse.data?.node?.lineItems?.[0]?.id;
+    if (!lineItemId) {
+      this.logger.error(
+        `createUsageCharge: no line items found for shop=${shopDomain}`,
+      );
+      return null;
+    }
+
+    const usageResponse = await client.request<AppUsageRecordCreateData>(
+      APP_USAGE_RECORD_CREATE_MUTATION,
+      {
+        variables: {
+          subscriptionLineItemId: lineItemId,
+          price: { amount: overageCharge.toFixed(2), currencyCode: 'USD' },
+          description: `Webhook events overage: ${eventsCount} events`,
+        },
+      },
+    );
+
+    const result = usageResponse.data?.appUsageRecordCreate;
+
+    if (!result) {
+      throw new InternalServerErrorException(
+        'Shopify returned no appUsageRecordCreate payload',
+      );
+    }
+
+    if (result.userErrors.length > 0) {
+      const msg = result.userErrors.map((e) => e.message).join('; ');
+      this.logger.error(
+        `appUsageRecordCreate userErrors shop=${shopDomain}: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        `Shopify usage charge error: ${msg}`,
+      );
+    }
+
+    this.logger.log({
+      message: 'usage charge created',
+      shopDomain,
+      amount: overageCharge,
+      eventsCount,
+    });
+
+    return result.appUsageRecord;
   }
 
   calculateOverageCharge(plan: Plan, eventsProcessedThisMonth: number): number {

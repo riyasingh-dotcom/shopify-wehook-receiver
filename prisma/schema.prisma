@@ -61,7 +61,9 @@ model Subscription {
   accessToken           String?
   trialEndsAt           DateTime?
   billingStartsAt       DateTime?
-  graceEndsAt           DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  graceEndsAt              DateTime?
+  eventsProcessedThisMonth Int       @default(0)
+  lastResetAt              DateTime  @default(now())
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 }

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Subscription" ADD COLUMN     "eventsProcessedThisMonth" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "lastResetAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
