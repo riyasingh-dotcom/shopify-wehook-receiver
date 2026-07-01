@@ -453,4 +453,28 @@ describe('BillingService', () => {
       ).rejects.toThrow();
     });
   });
+
+  describe('calculateOverageCharge', () => {
+    it('returns 0 for free plan regardless of events', () => {
+      expect(service.calculateOverageCharge('free', 99999)).toBe(0);
+    });
+
+    it('returns 0 for basic plan when events are within limit', () => {
+      expect(service.calculateOverageCharge('basic', 5000)).toBe(0);
+    });
+
+    it('returns correct charge for basic plan with 1000 events over limit', () => {
+      // 1000 events × $0.001 = $1.00
+      expect(service.calculateOverageCharge('basic', 6000)).toBe(1.0);
+    });
+
+    it('caps overage at $5.00 for basic plan regardless of volume', () => {
+      // 10,000 events over limit × $0.001 = $10 but cap is $5.00
+      expect(service.calculateOverageCharge('basic', 15000)).toBe(5.0);
+    });
+
+    it('returns 0 for pro plan regardless of events', () => {
+      expect(service.calculateOverageCharge('pro', 99999)).toBe(0);
+    });
+  });
 });

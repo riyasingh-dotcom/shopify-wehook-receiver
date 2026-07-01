@@ -363,6 +363,14 @@ export class BillingService {
     );
   }
 
+  calculateOverageCharge(plan: Plan, eventsProcessedThisMonth: number): number {
+    if (plan === 'free' || plan === 'pro') return 0;
+    const limit = PLANS.basic.features.webhookEventsLimit;
+    const overLimit = Math.max(0, eventsProcessedThisMonth - limit);
+    if (overLimit === 0) return 0;
+    return Math.min(overLimit * 0.001, 5.0);
+  }
+
   async testToken(
     shopDomain: string,
     accessToken: string,
