@@ -254,3 +254,25 @@ Most surprising uncovered line: `webhooks.service.ts:170–182` — the error br
 **Most surprising uncovered line:** `webhooks.controller.ts` — 22% function coverage means most controller handlers have zero tests. Controllers look simple but they wire guards, decorators, and response codes — integration tests here catch bugs that unit tests on the service miss entirely.
 
 **One thing not fully understood yet:** Why BullMQ's `attemptsMade >= attempts` check is needed before writing `FailedJob` — BullMQ fires the `failed` event on every failed attempt, not just the last one, so without that guard you'd write a `FailedJob` row on the first retry too.
+
+---
+
+## TDD Exercise Reflection — Day 4
+
+**The function:** `calculateOverageCharge(plan, eventsProcessedThisMonth)` — calculates how much to charge a merchant for going over their monthly webhook event limit.
+
+**Before writing the implementation, I knew:**
+
+Writing the tests first forced me to be exact about the rules before touching any code. I had to decide: does "within limit" mean strictly less than 5000, or up to and including 5000? The test `calculateOverageCharge('basic', 5000)` should return 0 — meaning the limit itself is not an overage. That sounds obvious in hindsight, but I had to make that call before writing a single line of logic.
+
+I also had to know the exact numbers: the limit is 5000, the rate is $0.001 per event, the cap is $5.00. Writing the test for "1000 events over" (6000 total → $1.00) and "cap scenario" (15000 total → $5.00, not $10.00) meant I had to do the maths myself first, not just assume the code would figure it out.
+
+**One thing the tests forced me to think about that I wouldn't have thought about otherwise:**
+
+The cap. Without writing the cap test first, I probably would have written `overLimit * 0.001` and called it done. The test for 15000 events explicitly forced me to handle the `Math.min(..., 5.0)` case. If I had written the implementation first, I might have forgotten the cap entirely and only noticed it when manually testing an edge case much later.
+
+**Would I use TDD again? For what kind of function?**
+
+Yes — for pure functions with clear rules. `calculateOverageCharge` is a perfect TDD candidate: no database, no network, no side effects. The inputs and outputs are numbers. The business rules can be expressed as exact assertions. TDD shines here because you can write all the test cases in 2 minutes and they tell you exactly what the function must do.
+
+I would not reach for TDD first when dealing with something like a NestJS controller or a database query — those have too many moving parts to specify upfront in isolation. But for any pure calculation function — pricing logic, discount rules, validation — writing the tests first is faster overall because it catches edge cases before the implementation exists.
