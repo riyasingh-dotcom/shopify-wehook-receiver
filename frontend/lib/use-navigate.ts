@@ -9,11 +9,9 @@ export function useNavigate(): (path: string) => void {
   const router = useRouter();
   return useCallback(
     (path: string) => {
-      const embedded =
-        typeof window !== 'undefined'
-          ? new URLSearchParams(window.location.search).get('embedded')
-          : null;
-      const dest = embedded ? `${path}?embedded=1` : path;
+      const search =
+        typeof window !== 'undefined' ? window.location.search : '';
+      const dest = search ? `${path}${search}` : path;
       router.push(dest);
     },
     [router],
