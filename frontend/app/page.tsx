@@ -668,7 +668,7 @@ export default function DashboardPage() {
         title="Upgrade required"
         primaryAction={{
           content: `Upgrade to ${(planGateModal?.requiredPlan ?? 'basic').charAt(0).toUpperCase() + (planGateModal?.requiredPlan ?? 'basic').slice(1)}`,
-          onAction: () => { window.location.href = '/billing'; },
+          onAction: () => { window.location.href = '/billing' + window.location.search; },
         }}
         secondaryActions={[{ content: 'Not now', onAction: () => setPlanGateModal(null) }]}
       >
