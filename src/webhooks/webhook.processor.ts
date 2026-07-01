@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { WebhooksService } from './webhooks.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { BillingService } from '../billing/billing.service';
 import type { WebhookJobData } from './webhooks.types';
 
 @Processor('webhook-processing')
@@ -13,6 +14,7 @@ export class WebhookProcessor extends WorkerHost {
   constructor(
     private readonly webhooksService: WebhooksService,
     private readonly prisma: PrismaService,
+    private readonly billingService: BillingService,
   ) {
     super();
   }
@@ -64,6 +66,9 @@ export class WebhookProcessor extends WorkerHost {
             payload,
             shopDomain,
           );
+          break;
+        case 'app_subscriptions/update':
+          await this.billingService.handleSubscriptionUpdate(payload);
           break;
         default:
           this.logger.warn(`job=${job.id} unhandled topic=${topic}`);

@@ -11,6 +11,7 @@ import {
   Session,
   type Shopify,
 } from '@shopify/shopify-api';
+import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { SHOPIFY_INSTANCE } from '../shopify/shopify.module';
 import { PLANS, PLAN_ORDER, type Plan, type PlanFeatures } from './plans';
@@ -300,6 +301,58 @@ export class BillingService {
       : status === 'DECLINED'
         ? 'DECLINED'
         : 'OTHER';
+  }
+
+  async handleSubscriptionUpdate(payload: unknown): Promise<void> {
+    const schema = z.object({
+      app_subscription: z.object({
+        admin_graphql_api_id: z.string(),
+        status: z.enum([
+          'ACTIVE',
+          'DECLINED',
+          'EXPIRED',
+          'FROZEN',
+          'CANCELLED',
+          'PENDING',
+        ]),
+      }),
+    });
+
+    const parsed = schema.parse(payload);
+    const { admin_graphql_api_id: chargeId, status: shopifyStatus } =
+      parsed.app_subscription;
+
+    const dbStatus = shopifyStatus.toLowerCase();
+
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { shopifyChargeId: chargeId },
+    });
+
+    if (!subscription) {
+      this.logger.warn(
+        `handleSubscriptionUpdate: no subscription found for chargeId=${chargeId}`,
+      );
+      return;
+    }
+
+    const graceEndsAt =
+      dbStatus === 'expired' || dbStatus === 'cancelled'
+        ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+        : dbStatus === 'active'
+          ? null
+          : undefined;
+
+    await this.prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: dbStatus,
+        ...(graceEndsAt !== undefined ? { graceEndsAt } : {}),
+      },
+    });
+
+    this.logger.log(
+      `handleSubscriptionUpdate shop=${subscription.shopDomain} chargeId=${chargeId} status=${dbStatus}`,
+    );
   }
 
   async testToken(

@@ -192,3 +192,12 @@ An **integration test** exercises multiple parts of the application working toge
 
 **Jest** is the testing framework—it runs tests, provides assertions (`expect`), and supports mocking and spying. **Supertest** is an HTTP client designed for testing web applications; it sends real HTTP requests (GET, POST, headers, JSON bodies, etc.) to your NestJS server and lets you verify the responses. In short, Jest tells you whether a test passed or failed, while Supertest lets you test your API endpoints as if they were being called by Shopify.
 
+### Shopify Billing API — Subscription Lifecycle Webhooks
+## app_subscriptions/update
+This is the main topic your app needs. Shopify fires it whenever an app subscription's status changes — covering transitions to ACTIVE (charge approved or trial started), DECLINED (merchant rejected the charge), EXPIRED (billing cycle ended without renewal), FROZEN (shop suspended by Shopify), CANCELLED (merchant uninstalled or cancelled manually), and PENDING (waiting for merchant approval). Your app should receive this webhook, look up the subscription by the admin_graphql_api_id in the payload, and update your local DB to reflect the new status. It's the single source of truth for subscription state changes.
+
+## What happens when a charge fails
+Shopify doesn't fire a separate "charge failed" webhook. Instead, when billing fails (e.g. the merchant's payment method declines), Shopify transitions the subscription to FROZEN and fires app_subscriptions/update with that status. Your app should treat FROZEN similarly to EXPIRED — restrict access (with a grace period if you choose) and prompt the merchant to update their payment method in the Shopify admin. Shopify will automatically retry the charge and fire another app_subscriptions/update with ACTIVE if it succeeds.
+
+## What is a "frozen" subscription
+A frozen subscription means the merchant's Shopify store itself has been suspended — typically because Shopify couldn't collect their platform subscription fee (not your app's fee). While frozen, the merchant can't use the Shopify Admin at all, so they can't use your app either. Your app should detect FROZEN status and pause access gracefully. When Shopify unfreezes the store (merchant pays their bill), the subscription transitions back to ACTIVE and you get another app_subscriptions/update. Don't delete their data when frozen — it's a temporary hold, not a cancellation.

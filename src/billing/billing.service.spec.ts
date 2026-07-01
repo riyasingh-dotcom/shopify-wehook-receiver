@@ -348,4 +348,112 @@ describe('BillingService', () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
   });
+
+  describe('handleSubscriptionUpdate', () => {
+    const chargeId = 'gid://shopify/AppSubscription/42';
+    const shopDomain = 'test-shop.myshopify.com';
+
+    const makePayload = (status: string) => ({
+      app_subscription: {
+        admin_graphql_api_id: chargeId,
+        status,
+      },
+    });
+
+    const existingSub = {
+      id: 'sub-1',
+      shopDomain,
+      shopifyChargeId: chargeId,
+      status: 'active',
+    };
+
+    it('updates status to cancelled and sets graceEndsAt 3 days out', async () => {
+      mockFindUnique.mockResolvedValueOnce(existingSub);
+      mockUpdate.mockResolvedValueOnce({});
+
+      const before = Date.now();
+      await service.handleSubscriptionUpdate(makePayload('CANCELLED'));
+      const after = Date.now();
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: existingSub.id },
+          data: expect.objectContaining({
+            status: 'cancelled',
+            graceEndsAt: expect.any(Date),
+          }),
+        }),
+      );
+
+      const call = mockUpdate.mock.calls[0][0] as {
+        data: { graceEndsAt: Date };
+      };
+      const graceMs = call.data.graceEndsAt.getTime();
+      expect(graceMs).toBeGreaterThanOrEqual(
+        before + 3 * 24 * 60 * 60 * 1000 - 100,
+      );
+      expect(graceMs).toBeLessThanOrEqual(
+        after + 3 * 24 * 60 * 60 * 1000 + 100,
+      );
+    });
+
+    it('updates status to expired and sets graceEndsAt 3 days out', async () => {
+      mockFindUnique.mockResolvedValueOnce(existingSub);
+      mockUpdate.mockResolvedValueOnce({});
+
+      await service.handleSubscriptionUpdate(makePayload('EXPIRED'));
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'expired',
+            graceEndsAt: expect.any(Date),
+          }),
+        }),
+      );
+    });
+
+    it('clears graceEndsAt when status becomes ACTIVE', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        ...existingSub,
+        status: 'expired',
+      });
+      mockUpdate.mockResolvedValueOnce({});
+
+      await service.handleSubscriptionUpdate(makePayload('ACTIVE'));
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'active', graceEndsAt: null }),
+        }),
+      );
+    });
+
+    it('does not set graceEndsAt for FROZEN status', async () => {
+      mockFindUnique.mockResolvedValueOnce(existingSub);
+      mockUpdate.mockResolvedValueOnce({});
+
+      await service.handleSubscriptionUpdate(makePayload('FROZEN'));
+
+      const call = mockUpdate.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      expect(call.data.status).toBe('frozen');
+      expect(call.data).not.toHaveProperty('graceEndsAt');
+    });
+
+    it('does nothing when no subscription matches the chargeId', async () => {
+      mockFindUnique.mockResolvedValueOnce(null);
+
+      await service.handleSubscriptionUpdate(makePayload('CANCELLED'));
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws a ZodError when payload is invalid', async () => {
+      await expect(
+        service.handleSubscriptionUpdate({ app_subscription: { status: 'CANCELLED' } }),
+      ).rejects.toThrow();
+    });
+  });
 });

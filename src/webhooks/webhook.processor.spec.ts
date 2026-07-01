@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { WebhookProcessor } from './webhook.processor';
 import { WebhooksService } from './webhooks.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { BillingService } from '../billing/billing.service';
 import type { Job } from 'bullmq';
 import type { WebhookJobData } from './webhooks.types';
 
@@ -36,6 +37,7 @@ describe('WebhookProcessor.handleFailed', () => {
           provide: PrismaService,
           useValue: { failedJob: { create: prismaCreate } },
         },
+        { provide: BillingService, useValue: {} },
       ],
     }).compile();
     processor = module.get(WebhookProcessor);
