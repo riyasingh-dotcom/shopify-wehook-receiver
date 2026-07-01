@@ -11,6 +11,7 @@ import {
   Grid,
   Layout,
   Page,
+  ProgressBar,
   SkeletonBodyText,
   SkeletonDisplayText,
   SkeletonPage,
@@ -27,6 +28,7 @@ type SubscriptionStatus = {
   plan: PlanKey
   status: string
   trialEndsAt: string | null
+  eventsProcessedThisMonth: number
   features: {
     webhookEventsLimit: number
     productChangesHistory: number
@@ -166,6 +168,16 @@ export default function BillingPage() {
   const currentStatus = subscriptionStatus?.status ?? 'active'
   const isExpiredOrDeclined = currentStatus === 'expired' || currentStatus === 'declined'
 
+  const eventsUsed = subscriptionStatus?.eventsProcessedThisMonth ?? 0
+  const eventsLimit = subscriptionStatus?.features.webhookEventsLimit ?? 100
+  const isUnlimited = eventsLimit === -1
+  const progressPercent = isUnlimited ? 0 : Math.min((eventsUsed / eventsLimit) * 100, 100)
+  const isNearLimit = !isUnlimited && progressPercent >= 80
+  const overageCharge =
+    currentPlan === 'basic'
+      ? Math.min(Math.max(0, eventsUsed - 5000) * 0.001, 5.0)
+      : 0
+
   return (
     <Page
       title="Billing &amp; Plans"
@@ -206,6 +218,55 @@ export default function BillingPage() {
             <Banner tone="success" title={`You are on the ${PLANS.find((p) => p.key === currentPlan)?.name ?? ''} plan`}>
               <p>Your current plan is active. Upgrade anytime to unlock more features.</p>
             </Banner>
+          </Layout.Section>
+        )}
+
+        {/* Usage this month */}
+        {subscriptionStatus && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Usage This Month</Text>
+
+                {isUnlimited ? (
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Unlimited webhook events — no overage on the Pro plan.
+                  </Text>
+                ) : (
+                  <BlockStack gap="300">
+                    <Text as="p" variant="bodyMd">
+                      {eventsUsed.toLocaleString()} / {eventsLimit.toLocaleString()} events used
+                    </Text>
+                    <ProgressBar
+                      progress={progressPercent}
+                      tone={progressPercent >= 80 ? 'critical' : 'highlight'}
+                      size="medium"
+                    />
+                  </BlockStack>
+                )}
+
+                {isNearLimit && (
+                  <Banner
+                    tone="warning"
+                    title={`You've used ${Math.round(progressPercent)}% of your monthly events`}
+                  >
+                    <p>
+                      You&apos;re close to your limit. Upgrade to avoid interruption once you hit{' '}
+                      {eventsLimit.toLocaleString()} events.
+                    </p>
+                  </Banner>
+                )}
+
+                {overageCharge > 0 && (
+                  <Banner tone="critical" title="Overage charge this month">
+                    <p>
+                      You have {(eventsUsed - 5000).toLocaleString()} events over your Basic plan
+                      limit. Estimated overage: <strong>${overageCharge.toFixed(2)}</strong>.
+                    </p>
+                  </Banner>
+                )}
+              </BlockStack>
+            </Card>
           </Layout.Section>
         )}
 

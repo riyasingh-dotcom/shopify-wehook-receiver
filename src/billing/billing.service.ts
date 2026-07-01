@@ -29,6 +29,7 @@ export type SubscriptionStatus = {
   status: string;
   trialEndsAt: Date | null;
   graceEndsAt: Date | null;
+  eventsProcessedThisMonth: number;
   features: PlanFeatures;
 };
 
@@ -155,6 +156,7 @@ export class BillingService {
         status: true,
         trialEndsAt: true,
         graceEndsAt: true,
+        eventsProcessedThisMonth: true,
       },
     });
 
@@ -164,6 +166,7 @@ export class BillingService {
         status: 'active',
         trialEndsAt: null,
         graceEndsAt: null,
+        eventsProcessedThisMonth: 0,
         features: PLANS.free.features,
       };
     }
@@ -179,6 +182,7 @@ export class BillingService {
       status: subscription.status,
       trialEndsAt: subscription.trialEndsAt,
       graceEndsAt: subscription.graceEndsAt,
+      eventsProcessedThisMonth: subscription.eventsProcessedThisMonth,
       features: PLANS[plan].features,
     };
   }

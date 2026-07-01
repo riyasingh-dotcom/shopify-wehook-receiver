@@ -91,6 +91,52 @@ describe('BillingService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('getStatus', () => {
+    const shopDomain = 'test-shop.myshopify.com';
+
+    it('returns free plan defaults when no subscription exists', async () => {
+      mockFindUnique.mockResolvedValueOnce(null);
+
+      const result = await service.getStatus(shopDomain);
+
+      expect(result.plan).toBe('free');
+      expect(result.status).toBe('active');
+      expect(result.eventsProcessedThisMonth).toBe(0);
+    });
+
+    it('returns plan, status, and eventsProcessedThisMonth for an active subscription', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        plan: 'basic',
+        status: 'active',
+        trialEndsAt: null,
+        graceEndsAt: null,
+        eventsProcessedThisMonth: 3200,
+      });
+
+      const result = await service.getStatus(shopDomain);
+
+      expect(result.plan).toBe('basic');
+      expect(result.status).toBe('active');
+      expect(result.eventsProcessedThisMonth).toBe(3200);
+      expect(result.features.webhookEventsLimit).toBe(5000);
+    });
+
+    it('falls back to free plan when subscription is not active', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        plan: 'basic',
+        status: 'expired',
+        trialEndsAt: null,
+        graceEndsAt: null,
+        eventsProcessedThisMonth: 100,
+      });
+
+      const result = await service.getStatus(shopDomain);
+
+      expect(result.plan).toBe('free');
+      expect(result.eventsProcessedThisMonth).toBe(100);
+    });
+  });
+
   describe('createSubscription', () => {
     const shopDomain = 'test-shop.myshopify.com';
     const sessionToken = 'eyJhbGciOiJIUzI1NiJ9.test_session_token';
